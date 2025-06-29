@@ -1,0 +1,16 @@
+name: 'VIPB JSON Tool'
+description: 'Convert .vipb ↔ JSON with full fidelity'
+author: 'YourOrg'
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+inputs:
+  mode:
+    description: 'vipb2json or json2vipb'
+    required: true
+  in:
+    description: 'Input file path'
+    required: true
+  out:
+    description: 'Output file path'
+    required: true
