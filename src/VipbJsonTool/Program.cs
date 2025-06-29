@@ -1,0 +1,132 @@
+using System.Text.Json;
+using System.Xml;
+
+if (args.Length != 3)
+{
+    Console.Error.WriteLine("Usage: VipbJsonTool vipb2json|json2vipb <input> <output>");
+    return 1;
+}
+
+var mode   = args[0].ToLowerInvariant();
+var input  = args[1];
+var output = args[2];
+
+if (mode == "vipb2json")
+{
+    VipbSerializer.ToJson(input, output);
+}
+else if (mode == "json2vipb")
+{
+    VipbSerializer.FromJson(input, output);
+}
+else
+{
+    Console.Error.WriteLine("Mode must be vipb2json or json2vipb");
+    return 1;
+}
+
+return 0;
+
+static class VipbSerializer
+{
+    public static void ToJson(string vipbPath, string jsonPath)
+    {
+        using var fs   = File.Create(jsonPath);
+        using var json = new Utf8JsonWriter(fs, new JsonWriterOptions {
+            Encoder    = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            Indented   = true,
+            SkipValidation = false
+        });
+        using var xr = XmlReader.Create(vipbPath, new XmlReaderSettings { IgnoreWhitespace = false });
+
+        var elemStack = new Stack<ElementFrame>();
+        json.WriteStartObject();               // root
+
+        while (xr.Read())
+        {
+            switch (xr.NodeType)
+            {
+                case XmlNodeType.Element:
+                    var frame = new ElementFrame(xr.Name);
+                    elemStack.Push(frame);
+
+                    json.WritePropertyName(xr.Name);
+                    json.WriteStartObject();
+
+                    if (xr.HasAttributes)
+                    {
+                        while (xr.MoveToNextAttribute())
+                        {
+                            json.WriteString($"@{xr.Name}", xr.Value);
+                        }
+                        xr.MoveToElement();
+                    }
+
+                    if (xr.IsEmptyElement)
+                    {
+                        json.WriteEndObject();
+                        elemStack.Pop();
+                    }
+                    break;
+
+                case XmlNodeType.Text:
+                    json.WriteString("__text", xr.Value);
+                    break;
+
+                case XmlNodeType.EndElement:
+                    json.WriteEndObject();
+                    elemStack.Pop();
+                    break;
+            }
+        }
+        json.WriteEndObject();                 // root
+    }
+
+    public static void FromJson(string jsonPath, string vipbPath)
+    {
+        var doc = new XmlDocument();
+        var root = doc.CreateElement("VI_Package_Builder_Settings");
+        doc.AppendChild(root);
+
+        using var jf = File.OpenRead(jsonPath);
+        using var jd = JsonDocument.Parse(jf, new JsonDocumentOptions { AllowTrailingCommas = false });
+
+        BuildXml(root, jd.RootElement);
+
+        using var xw = XmlWriter.Create(vipbPath,
+            new XmlWriterSettings { Indent = true, OmitXmlDeclaration = true });
+        doc.Save(xw);
+
+        static void BuildXml(XmlElement parent, JsonElement src)
+        {
+            foreach (var prop in src.EnumerateObject())
+            {
+                if (prop.Name.StartsWith("@"))
+                {
+                    parent.SetAttribute(prop.Name.Substring(1), prop.Value.GetString() ?? "");
+                    continue;
+                }
+
+                if (prop.NameEquals("__text"))
+                {
+                    parent.InnerText = prop.Value.GetString() ?? "";
+                    continue;
+                }
+
+                XmlElement child = parent.OwnerDocument!.CreateElement(prop.Name);
+                parent.AppendChild(child);
+
+                if (prop.Value.ValueKind == JsonValueKind.Object)
+                {
+                    BuildXml(child, prop.Value);
+                }
+                else
+                {
+                    child.InnerText = prop.Value.GetString() ?? prop.Value.GetRawText();
+                }
+            }
+        }
+    }
+
+    private sealed record ElementFrame(string Name);
+}
