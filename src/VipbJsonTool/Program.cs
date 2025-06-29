@@ -87,6 +87,7 @@ static class VipbSerializer
 
     public static void FromJson(string jsonPath, string vipbPath)
     {
+        var doc = new XmlDocument(); 
         using var jf = File.OpenRead(jsonPath);
         using var jd = JsonDocument.Parse(jf);
 
@@ -95,9 +96,28 @@ static class VipbSerializer
         doc.AppendChild(root);
         BuildXml(root, firstProp.Value);    // << delegate into existing method
 
-        using var xw = XmlWriter.Create(vipbPath,
-            new XmlWriterSettings { Indent = true, OmitXmlDeclaration = true });
-        doc.Save(xw);
+    var xws = new XmlWriterSettings {
+        Indent = true,
+        IndentChars = "  ",
+        NewLineChars = "\r\n",
+        OmitXmlDeclaration = true,
+        Encoding = new System.Text.UTF8Encoding(false)   // no BOM
+};
+
+// write to memory first
+using var ms = new MemoryStream();
+using (var xw = XmlWriter.Create(ms, xws))
+{
+    doc.Save(xw);
+}
+ms.Position = 0;
+
+// remove the space before '/>'
+string xml = new StreamReader(ms, xws.Encoding).ReadToEnd()
+                  .Replace(" />", "/>");
+
+File.WriteAllText(vipbPath, xml, xws.Encoding);
+
 
         static void BuildXml(XmlElement parent, JsonElement src)
         {
