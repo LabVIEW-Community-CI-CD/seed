@@ -1,16 +1,25 @@
-name: 'VIPB JSON Tool'
+name: 'VIPB JSON Tool'
 description: 'Convert .vipb ↔ JSON with full fidelity'
-author: 'svelderrainruiz'
+author: 'Sergio Velderrain'
+branding:
+  icon: 'repeat'       # optional marketplace icon
+  color: 'green'
+
+inputs:
+  mode:
+    description: "vipb2json or json2vipb"
+    required: true
+  in:
+    description: "Input file path"
+    required: true
+  out:
+    description: "Output file path"
+    required: true
+
 runs:
   using: 'docker'
   image: 'Dockerfile'
-inputs:
-  mode:
-    description: 'vipb2json or json2vipb'
-    required: true
-  in:
-    description: 'Input file path'
-    required: true
-  out:
-    description: 'Output file path'
-    required: true
+  args:
+    - ${{ inputs.mode }}
+    - ${{ inputs.in }}
+    - ${{ inputs.out }}
