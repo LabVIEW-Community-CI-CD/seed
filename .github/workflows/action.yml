@@ -1,6 +1,6 @@
 name: 'VIPB JSON Tool'
 description: 'Convert .vipb ↔ JSON with full fidelity'
-author: 'Sergio Velderrain'
+author: 'svelderrainruiz'
 branding:
   icon: 'repeat'       # optional marketplace icon
   color: 'green'
