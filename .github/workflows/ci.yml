@@ -1,0 +1,38 @@
+name: build-test-release
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.x'
+
+      - name: Restore & build
+        run: dotnet build src/VipbJsonTool/VipbJsonTool.csproj -c Release
+
+      - name: Publish self-contained single file (linux-x64)
+        run: dotnet publish src/VipbJsonTool -c Release -r linux-x64 --self-contained -o publish/linux-x64-singlefile
+
+      - name: Unit tests (PowerShell)
+        shell: pwsh
+        run: |
+          Install-Module Pester -Force -Scope CurrentUser
+          Invoke-Pester tests -CI
+
+      - name: Build Action image
+        run: docker build -t vipb-json:${{ github.sha }} .
+
+      # optional artifact upload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vipb-json-cli
+          path: publish/linux-x64-singlefile/VipbJsonTool
