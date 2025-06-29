@@ -87,14 +87,13 @@ static class VipbSerializer
 
     public static void FromJson(string jsonPath, string vipbPath)
     {
-        var doc = new XmlDocument();
-        var root = doc.CreateElement("VI_Package_Builder_Settings");
-        doc.AppendChild(root);
-
         using var jf = File.OpenRead(jsonPath);
-        using var jd = JsonDocument.Parse(jf, new JsonDocumentOptions { AllowTrailingCommas = false });
+        using var jd = JsonDocument.Parse(jf);
 
-        BuildXml(root, jd.RootElement);
+        var firstProp = jd.RootElement.EnumerateObject().First();
+        var root      = doc.CreateElement(firstProp.Name);
+        doc.AppendChild(root);
+        BuildXml(root, firstProp.Value);    // << delegate into existing method
 
         using var xw = XmlWriter.Create(vipbPath,
             new XmlWriterSettings { Indent = true, OmitXmlDeclaration = true });
