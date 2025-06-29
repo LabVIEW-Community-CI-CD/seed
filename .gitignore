@@ -1,0 +1,24 @@
+# --- .NET / VS Code ---
+bin/
+obj/
+publish/
+*.user
+*.suo
+.vs/
+.vscode/
+
+# NuGet / dotnet
+*.nupkg
+.nuget/
+packages/
+artifacts/
+
+# Docker build context
+*.tar
+*.gz
+*.zip
+
+# OS files
+Thumbs.db
+.DS_Store
+Desktop.ini
