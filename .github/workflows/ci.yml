@@ -31,9 +31,9 @@ jobs:
           **/*.csproj
           **/*.sln
 
-    # --- restore & build -----------------------------------------------------
+# --- restore & build -----------------------------------------------------
     - name: Restore packages
-      run: dotnet restore
+      run: dotnet restore src/VipbJsonTool/VipbJsonTool.csproj
 
     - name: Build (warnings ≠ errors)
       run: dotnet build src/VipbJsonTool/VipbJsonTool.csproj `
