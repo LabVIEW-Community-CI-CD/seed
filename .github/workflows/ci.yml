@@ -1,108 +1,92 @@
-name: build-test-release
+name: build‑test‑release
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
-  build:
+  build-test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: pwsh        # every run block uses PowerShell 7
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    # --- source code ---------------------------------------------------------
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
-      - name: Setup .NET 8
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
+    # --- .NET SDK ------------------------------------------------------------
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x          # latest LTS
+        cache: true                    # NuGet cache
 
-      - name: Restore & build
-        run: dotnet build src/VipbJsonTool/VipbJsonTool.csproj -c Release
+    # --- restore & build -----------------------------------------------------
+    - name: Restore packages
+      run: dotnet restore
 
-      - name: Publish self-contained single file (linux-x64)
-        run: |
-          dotnet publish src/VipbJsonTool -c Release -r linux-x64 \
-            --self-contained \
-            -o publish/linux-x64-singlefile
+    - name: Build (warnings ≠ errors)
+      run: dotnet build src/VipbJsonTool/VipbJsonTool.csproj `
+                        -c Release `
+                        -p:TreatWarningsAsErrors=false `
+                        --no-restore
 
-      - name: Convert VIPB and generate full patch
-        shell: pwsh
-        run: |
-          # 1. Convert VIPB to JSON
-          dotnet run --project src/VipbJsonTool -- vipb2json "tests/Samples/NI Icon editor.vipb" tmp.json
+    # --- publish single‑file CLI --------------------------------------------
+    - name: Publish CLI (linux‑x64 single‑file)
+      run: dotnet publish src/VipbJsonTool `
+                          -c Release `
+                          -r linux-x64 `
+                          --self-contained `
+                          -p:PublishSingleFile=true `
+                          -p:TreatWarningsAsErrors=false `
+                          --no-restore `
+                          --no-build `
+                          -o publish/linux-x64
 
-          # 2. Enumerate all JSON paths to a file
-          pwsh -NoProfile -ExecutionPolicy Bypass -File ./tools/Enumerate-VipbPaths.ps1 tmp.json |
-            Out-File -Encoding utf8 all-paths.txt
+    # --- PowerShell test prerequisites --------------------------------------
+    - name: Install PowerShell modules
+      run: |
+        Install-Module PowerShell-Yaml -RequiredVersion 0.4.2 -Scope CurrentUser -Force
+        Install-Module Pester          -Scope CurrentUser -Force
 
-          # 3. Build YAML patch with one test value for every path
-          $patch = @(
-            'schema_version: 1',
-            'patch:'
-          )
-          foreach ($p in Get-Content all-paths.txt) {
-            if ($p -match '\[\d+\]')       { $patch += "  `${p}: '__ARRAY__'" }
-            elseif ($p -match '@')         { $patch += "  `${p}: 'TEST'"      }
-            elseif ($p -in 'true','false') { $patch += "  `${p}: true"        }
-            else                           { $patch += "  `${p}: 'TEST'"      }
-          }
-          $patch | Out-File ci-patch-full.yml -Encoding utf8
+    # --- generate patch + run tests -----------------------------------------
+    - name: Generate patch & run Pester tests
+      run: |
+        # 1. Convert VIPB → JSON with the freshly published CLI
+        ./publish/linux-x64/VipbJsonTool vipb2json "tests/Samples/NI Icon editor.vipb" tmp.json
 
-      - name: Prepare PowerShell.Yaml module for tests
-        shell: pwsh
-        run: |
-          $pkg = 'powershell-yaml'; $ver = '0.4.2'
-          $url = "https://www.powershellgallery.com/api/v2/package/$pkg/$ver"
-          Invoke-WebRequest -Uri $url -OutFile "$pkg.$ver.nupkg"
-          $dest = "$(pwd)/$pkg-nupkg"
-          New-Item -ItemType Directory -Force -Path $dest | Out-Null
-          Add-Type -AssemblyName 'System.IO.Compression.FileSystem'
-          [IO.Compression.ZipFile]::ExtractToDirectory("$pkg.$ver.nupkg", $dest)
-          $psm1 = Join-Path $dest 'powershell-yaml.psm1'
-          if (-not (Test-Path $psm1)) {
-            Write-Host "Contents of $($dest):"
-            Get-ChildItem -Recurse $dest
-            throw "couldn't find $psm1"
-          }
-          Import-Module $psm1 -Force
-          Write-Host "PowerShell.Yaml imported from $psm1"
+        # 2. Enumerate JSON paths
+        ./tools/Enumerate-VipbPaths.ps1 tmp.json |
+          Out-File -Encoding utf8 all-paths.txt
 
-      - name: Run full round-trip + patch tests
-        shell: pwsh
-        run: |
-          # Install Pester if needed
-          Install-Module Pester -Force -Scope CurrentUser
+        # 3. Build YAML patch file
+        $patch = @('schema_version: 1','patch:')
+        foreach ($p in Get-Content all-paths.txt) {
+          if    ($p -match '\[\d+\]')  { $patch += " $p: '__ARRAY__'" }
+          elseif($p -match '@')        { $patch += " $p: 'TEST'"      }
+          elseif($p -in 'true','false'){ $patch += " $p: true"        }
+          else                         { $patch += " $p: 'TEST'"      }
+        }
+        $patch | Out-File ci-patch-full.yml -Encoding utf8
 
-          # Manually unpack PowerShell.Yaml
-          $pkg = 'powershell-yaml'; $ver = '0.4.2'
-          $url = "https://www.powershellgallery.com/api/v2/package/$pkg/$ver"
-          Invoke-WebRequest -Uri $url -OutFile "$pkg.$ver.nupkg"
-          $dest = "$(pwd)/$pkg-nupkg"
-          if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
-          New-Item -ItemType Directory -Force -Path $dest | Out-Null
-          Add-Type -AssemblyName 'System.IO.Compression.FileSystem'
-          [IO.Compression.ZipFile]::ExtractToDirectory("$pkg.$ver.nupkg", $dest)
-          $psm1 = Join-Path $dest 'powershell-yaml.psm1'
-          if (-not (Test-Path $psm1)) {
-            Write-Host "Contents of $($dest):"
-            Get-ChildItem -Recurse $dest
-            throw "couldn't find $psm1"
-          }
-          Import-Module $psm1 -Force
-          Write-Host "PowerShell.Yaml imported from $psm1"
+        # 4. Run tests
+        Invoke-Pester tests/RoundTrip.Full.Tests.ps1      -CI
+        Invoke-Pester tests/RoundTripSelective.Deep.Tests.ps1 -CI
 
-          # Run the tests that depend on it
-          Invoke-Pester tests/RoundTrip.Full.Tests.ps1 -CI
-          Invoke-Pester tests/RoundTripSelective.Deep.Tests.ps1 -CI
+    # --- Docker image (optional) --------------------------------------------
+    - name: Build Docker image
+      run: docker build -t vipb-json:${{ github.sha }} .
 
-      - name: Build Action image
-        run: docker build -t vipb-json:${{ github.sha }} .
-
-      - name: Upload CLI artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: vipb-json-cli
-          path: publish/linux-x64-singlefile/VipbJsonTool
+    # --- artefact upload -----------------------------------------------------
+    - name: Upload CLI artefact
+      uses: actions/upload-artifact@v4
+      with:
+        name: vipb-json-cli-linux-x64
+        path: publish/linux-x64/VipbJsonTool
