@@ -27,11 +27,11 @@ jobs:
         run: |
           Install-Module Pester -Force -Scope CurrentUser
           Invoke-Pester tests -CI
+          Invoke-Pester tests/RoundTrip.Deep.Tests.ps1
 
       - name: Build Action image
         run: docker build -t vipb-json:${{ github.sha }} .
 
-      # optional artifact upload
       - uses: actions/upload-artifact@v4
         with:
           name: vipb-json-cli
