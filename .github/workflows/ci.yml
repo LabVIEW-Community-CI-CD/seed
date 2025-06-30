@@ -40,11 +40,11 @@ jobs:
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
           Add-Type -AssemblyName 'System.IO.Compression.FileSystem'
           [IO.Compression.ZipFile]::ExtractToDirectory("$pkg.$ver.nupkg", $dest)
-          $psm1 = Join-Path $dest "tools/PowerShell.Yaml.psm1"
+          $psm1 = Join-Path $dest "$pkg.psm1"
           if (-not (Test-Path $psm1)) {
             Write-Host "File listing for ${dest}:"
             Get-ChildItem -Recurse $dest | ForEach-Object { Write-Host $_.FullName }
-            Write-Error "PowerShell.Yaml.psm1 not found at $psm1 after extraction!"
+            Write-Error "$psm1 not found after extraction!"
             exit 1
           }
           Import-Module $psm1 -Force
@@ -53,12 +53,11 @@ jobs:
       - name: Run Pester tests
         shell: pwsh
         run: |
-          $psm1 = Get-ChildItem -Recurse -Filter PowerShell.Yaml.psm1 -Path "$(pwd)/powershell-yaml-nupkg" | Select-Object -ExpandProperty FullName -First 1
+          $psm1 = "$(pwd)/powershell-yaml-nupkg/powershell-yaml.psm1"
           Import-Module $psm1 -Force
           Install-Module Pester -Force -Scope CurrentUser
           Invoke-Pester tests -CI
           Invoke-Pester tests/RoundTrip.Deep.Tests.ps1
-
 
       - name: Build Action image
         run: docker build -t vipb-json:${{ github.sha }} .
