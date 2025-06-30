@@ -36,21 +36,24 @@ jobs:
           $ver  = '0.4.2'
           $url  = "https://www.powershellgallery.com/api/v2/package/$pkg/$ver"
           Invoke-WebRequest -Uri $url -OutFile "$pkg.$ver.nupkg"
-          mkdir -p $pkg
+          $dest = "$(pwd)/$pkg-nupkg"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
           Add-Type -AssemblyName 'System.IO.Compression.FileSystem'
-          [IO.Compression.ZipFile]::ExtractToDirectory("$pkg.$ver.nupkg", $pkg)
-          $psm1 = Get-ChildItem -Recurse -Filter PowerShell.Yaml.psm1 -Path $pkg | Select-Object -ExpandProperty FullName -First 1
-          if (-not $psm1) { Write-Error "PowerShell.Yaml.psm1 not found in $pkg after extraction!"; exit 1 }
-          Import-Module $psm1
+          [IO.Compression.ZipFile]::ExtractToDirectory("$pkg.$ver.nupkg", $dest)
+          $psm1 = Get-ChildItem -Recurse -Filter PowerShell.Yaml.psm1 -Path $dest | Select-Object -ExpandProperty FullName -First 1
+          if (-not $psm1) { Write-Error "PowerShell.Yaml.psm1 not found in $dest after extraction!"; exit 1 }
+          Import-Module $psm1 -Force
           Write-Host "PowerShell.Yaml imported from $psm1"
 
       - name: Run Pester tests
         shell: pwsh
         run: |
-          Import-Module (Resolve-Path PowerShell.Yaml/tools/PowerShell.Yaml.psm1)
+          $psm1 = Get-ChildItem -Recurse -Filter PowerShell.Yaml.psm1 -Path "$(pwd)/powershell-yaml-nupkg" | Select-Object -ExpandProperty FullName -First 1
+          Import-Module $psm1 -Force
           Install-Module Pester -Force -Scope CurrentUser
           Invoke-Pester tests -CI
           Invoke-Pester tests/RoundTrip.Deep.Tests.ps1
+
 
       - name: Build Action image
         run: docker build -t vipb-json:${{ github.sha }} .
