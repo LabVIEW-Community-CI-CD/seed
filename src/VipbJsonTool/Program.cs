@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Xml;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -9,18 +11,17 @@ namespace VipbJsonTool
 {
     class Program
     {
-        static void Main(string[] args)
+        static int Main(string[] args)
         {
             if (args.Length < 1)
             {
                 Console.Error.WriteLine("Usage: VipbJsonTool vipb2json|json2vipb|patch2vipb <input> <output> [patchYaml]");
-                Environment.Exit(1);
+                return 1;
             }
 
-            var mode = args[0];
             try
             {
-                switch (mode)
+                switch (args[0])
                 {
                     case "vipb2json":
                         Vipb2Json(args[1], args[2]);
@@ -29,99 +30,94 @@ namespace VipbJsonTool
                         Json2Vipb(args[1], args[2]);
                         break;
                     case "patch2vipb":
-                        PatchJson(args[1], args[2], args.Length > 3 ? args[3] : throw new ArgumentException("Missing patch YAML"));
+                        if (args.Length < 4) throw new ArgumentException("Missing patch YAML file");
+                        Patch2Vipb(args[1], args[2], args[3]);
                         break;
                     default:
-                        throw new ArgumentException($"Unknown mode '{mode}'");
+                        throw new ArgumentException($"Unknown mode '{args[0]}'");
                 }
+                return 0;
             }
             catch (Exception ex)
             {
                 Console.Error.WriteLine(ex.Message);
-                Environment.Exit(1);
+                return 1;
             }
         }
 
         static void Vipb2Json(string vipbIn, string jsonOut)
         {
-            var doc = new System.Xml.XmlDocument();
+            var doc = new XmlDocument();
             doc.Load(vipbIn);
-            var json = JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true });
+            string json = JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(jsonOut, json);
         }
 
         static void Json2Vipb(string jsonIn, string vipbOut)
         {
-            var xml = JsonToXmlConverter.Convert(File.ReadAllText(jsonIn)); // assume implementation
+            // placeholder: implement your JSON→XML conversion logic here
+            string xml = JsonToXmlConverter.Convert(File.ReadAllText(jsonIn));
             File.WriteAllText(vipbOut, xml);
         }
 
-        static void PatchJson(string inJson, string outVipb, string patchYaml)
+        static void Patch2Vipb(string srcJson, string vipbOut, string patchYaml)
         {
-            // Load patch map from YAML
-            var catalog = PatchMap.Load(patchYaml);
+            var map = PatchMap.Load(patchYaml);
+            var root = JsonNode.Parse(File.ReadAllText(srcJson)) 
+                       ?? throw new InvalidOperationException("Invalid JSON");
 
-            // Read JSON
-            var root = JsonNode.Parse(File.ReadAllText(inJson));
-            if (root == null) throw new InvalidOperationException("Invalid JSON");
+            foreach (var kv in map.Patch)
+                ApplyPath(root, kv.Key.Split('.', StringSplitOptions.RemoveEmptyEntries), kv.Value);
 
-            foreach (var kv in catalog.Patch)
-            {
-                var path = kv.Key;
-                var value = kv.Value;
-                ApplyPath(root, path.TrimStart('.').Split('.'), 0, value!);
-            }
-
-            // Write out patched VIPB via round-trip JSON->VIPB
-            var tmpJson = Path.GetTempFileName();
-            File.WriteAllText(tmpJson, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
-            Json2Vipb(tmpJson, outVipb);
-            File.Delete(tmpJson);
+            var tmp = Path.GetTempFileName();
+            File.WriteAllText(tmp, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            Json2Vipb(tmp, vipbOut);
+            File.Delete(tmp);
         }
 
-        static void ApplyPath(JsonNode node, string[] parts, int idx, JsonNode value)
+        static void ApplyPath(JsonNode node, string[] path, JsonNode? value)
         {
-            if (idx == parts.Length - 1)
+            for (int i = 0; i < path.Length - 1; i++)
             {
-                if (node is JsonObject obj)
-                    obj[parts[idx]] = value;
-                else
-                    throw new InvalidOperationException("Cannot apply patch, target is not object");
-            }
-            else
-            {
-                var next = (node as JsonObject)?[parts[idx]];
-                if (next == null)
+                var key = path[i];
+                if (node[key] is not JsonObject next)
                 {
                     next = new JsonObject();
-                    (node as JsonObject)![parts[idx]] = next;
+                    (node as JsonObject)![key] = next;
                 }
-                ApplyPath(next, parts, idx + 1, value);
+                node = next;
             }
+
+            if (node is JsonObject obj)
+                obj[path[^1]] = value;
+            else
+                throw new InvalidOperationException("Cannot apply patch to non-object node");
         }
     }
 
-    public class PatchMap
+    class PatchMap
     {
         public int SchemaVersion { get; set; }
-        public Dictionary<string, JsonNode?> Patch { get; set; } = new Dictionary<string, JsonNode?>();
+        public Dictionary<string, JsonNode?> Patch { get; set; } = new();
 
-        public static PatchMap Load(string yamlPath)
+        public static PatchMap Load(string yamlFile)
         {
-            var yaml = File.ReadAllText(yamlPath);
-            var deserializer = new DeserializerBuilder()
-                                .WithNamingConvention(CamelCaseNamingConvention.Instance)
-                                .IgnoreUnmatchedProperties()
-                                .Build();
-            var root = deserializer.Deserialize<Dictionary<string, object>>(yaml);
+            var yaml = File.ReadAllText(yamlFile);
+            var des = new DeserializerBuilder()
+                        .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                        .IgnoreUnmatchedProperties()
+                        .Build();
 
-            if (!root.TryGetValue("schema_version", out var verObj) || Convert.ToInt32(verObj) != 1)
-                throw new Exception("Unsupported schema_version");
+            var dict = des.Deserialize<Dictionary<string, object>>(yaml)
+                       ?? throw new InvalidOperationException("Invalid YAML");
 
-            if (!root.TryGetValue("patch", out var patchObj) || !(patchObj is Dictionary<object, object> raw))
-                throw new Exception("Missing or invalid 'patch' section");
+            if (!dict.TryGetValue("schema_version", out var v) || Convert.ToInt32(v) != 1)
+                throw new InvalidOperationException("Unsupported schema_version");
 
-            var map = new Dictionary<string, JsonNode?>();
+            if (!dict.TryGetValue("patch", out var p) || p is not Dictionary<object, object> raw)
+                throw new InvalidOperationException("Missing or invalid 'patch' section");
+
+            var map = new PatchMap();
             foreach (var kv in raw)
             {
                 var path = kv.Key.ToString()!;
@@ -129,13 +125,24 @@ namespace VipbJsonTool
                 {
                     bool b   => JsonValue.Create(b),
                     int i    => JsonValue.Create(i),
+                    long l   => JsonValue.Create(l),
+                    double d => JsonValue.Create(d),
                     string s => JsonValue.Create(s),
                     _        => JsonValue.Create(kv.Value.ToString())
                 };
-                map[path] = node;
+                map.Patch[path] = node;
             }
 
-            return new PatchMap { SchemaVersion = 1, Patch = map };
+            return map;
+        }
+    }
+
+    static class JsonToXmlConverter
+    {
+        public static string Convert(string json)
+        {
+            // stub: your conversion implementation here
+            throw new NotImplementedException("Implement JSON→VIPB XML conversion");
         }
     }
 }
