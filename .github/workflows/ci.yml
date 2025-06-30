@@ -81,6 +81,7 @@ jobs:
           $url = "https://www.powershellgallery.com/api/v2/package/$pkg/$ver"
           Invoke-WebRequest -Uri $url -OutFile "$pkg.$ver.nupkg"
           $dest = "$(pwd)/$pkg-nupkg"
+          if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
           Add-Type -AssemblyName 'System.IO.Compression.FileSystem'
           [IO.Compression.ZipFile]::ExtractToDirectory("$pkg.$ver.nupkg", $dest)
