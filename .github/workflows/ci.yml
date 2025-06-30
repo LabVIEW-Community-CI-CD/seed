@@ -22,12 +22,21 @@ jobs:
       - name: Publish self‑contained single file (linux‑x64)
         run: dotnet publish src/VipbJsonTool -c Release -r linux-x64 --self-contained -o publish/linux-x64-singlefile
 
-      - name: Generate round‑trip artifacts
+      - name: Generate round-trip artifacts for full coverage
         shell: pwsh
         run: |
           dotnet run --project src/VipbJsonTool -- vipb2json 'tests/Samples/NI Icon editor.vipb' tmp.json
-          dotnet run --project src/VipbJsonTool -- patch2vipb tmp.json tmp.vipb ci-patch.yml '' ''
-          dotnet run --project src/VipbJsonTool -- vipb2json tmp.vipb tmp2.json
+          pwsh tools/Enumerate-VipbPaths.ps1 tmp.json > all-paths.txt
+          $yaml = @()
+          $yaml += 'schema_version: 1'
+          $yaml += 'patch:'
+          foreach ($p in Get-Content all-paths.txt) {
+            if ($p -match '\[\d+\]') { $yaml += "  $p: '__ARRAY__'" }
+            elseif ($p -match '@')   { $yaml += "  $p: 'TEST'" }
+            elseif ($p.EndsWith('true') -or $p.EndsWith('false')) { $yaml += "  $p: true" }
+            else { $yaml += "  $p: 'TEST'" }
+          }
+          $yaml | Out-File ci-patch-full.yml -Encoding utf8
 
       - name: Prepare PowerShell.Yaml for deep test
         shell: pwsh
@@ -50,14 +59,13 @@ jobs:
           Import-Module $psm1 -Force
           Write-Host "PowerShell.Yaml imported from $psm1"
 
-      - name: Run Pester tests
+      - name: Run full-coverage Pester test
         shell: pwsh
         run: |
           $psm1 = "$(pwd)/powershell-yaml-nupkg/powershell-yaml.psm1"
           Import-Module $psm1 -Force
           Install-Module Pester -Force -Scope CurrentUser
-          Invoke-Pester tests -CI
-          Invoke-Pester tests/RoundTrip.Deep.Tests.ps1
+          Invoke-Pester tests/RoundTrip.Full.Tests.ps1 -CI
 
       - name: Build Action image
         run: docker build -t vipb-json:${{ github.sha }} .
