@@ -108,7 +108,6 @@ jobs:
         test -f ci-patch-full.yml || (echo 'ERROR: patch YAML missing' && exit 1)
 
     - name: Run Pester tests
-      continue-on-error: true
       shell: pwsh
       run: |
         # 1. Basic round-trip
@@ -125,6 +124,7 @@ jobs:
           Path       = 'tests/RoundTrip.Deep.Tests.ps1'
           Parameters = @{ PatchFile = 'ci-patch-full.yml'; SourceVipb = 'tests/Samples/NI Icon editor.vipb' }
         }
+      continue-on-error: true
 
     # --- Docker image (optional) --------------------------------------------
     - name: Build Docker image
