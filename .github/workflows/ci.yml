@@ -9,7 +9,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # fetch full history so all files are present
 
       - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
@@ -20,18 +23,21 @@ jobs:
         run: dotnet build src/VipbJsonTool/VipbJsonTool.csproj -c Release
 
       - name: Publish self-contained single file (linux-x64)
-        run: dotnet publish src/VipbJsonTool -c Release -r linux-x64 --self-contained -o publish/linux-x64-singlefile
+        run: dotnet publish src/VipbJsonTool -c Release -r linux-x64 \
+          --self-contained -o publish/linux-x64-singlefile
 
       - name: Generate round-trip artifacts for full coverage
         shell: pwsh
+        working-directory: ${{ github.workspace }}
         run: |
           # 1. VIPB → JSON
           dotnet run --project src/VipbJsonTool -- vipb2json "tests/Samples/NI Icon editor.vipb" tmp.json
 
           # 2. Enumerate every JSON path into a text file
-          ./tools/Enumerate-VipbPaths.ps1 tmp.json | Out-File -Encoding utf8 all-paths.txt
+          pwsh -NoProfile -ExecutionPolicy Bypass -File tools/Enumerate-VipbPaths.ps1 tmp.json `
+            | Out-File -Encoding utf8 all-paths.txt
 
-          # 3. Build a full-coverage patch touching every path
+          # 3. Build full-coverage patch touching every path
           $yaml = @(
             'schema_version: 1'
             'patch:'
@@ -43,7 +49,7 @@ jobs:
             elseif ($p -match '@') {
               $yaml += "  $($p): 'TEST'"
             }
-            elseif ($p.EndsWith('true') -or $p.EndsWith('false')) {
+            elseif ($p -in 'true','false') {
               $yaml += "  $($p): true"
             }
             else {
@@ -55,20 +61,17 @@ jobs:
       - name: Prepare PowerShell.Yaml for deep test
         shell: pwsh
         run: |
-          $pkg  = 'powershell-yaml'
-          $ver  = '0.4.2'
-          $url  = "https://www.powershellgallery.com/api/v2/package/$pkg/$ver"
+          $pkg = 'powershell-yaml'; $ver = '0.4.2'
+          $url = "https://www.powershellgallery.com/api/v2/package/$pkg/$ver"
           Invoke-WebRequest -Uri $url -OutFile "$pkg.$ver.nupkg"
           $dest = "$(pwd)/$pkg-nupkg"
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
           Add-Type -AssemblyName 'System.IO.Compression.FileSystem'
           [IO.Compression.ZipFile]::ExtractToDirectory("$pkg.$ver.nupkg", $dest)
-          $psm1 = Join-Path $dest "powershell-yaml.psm1"
+          $psm1 = Join-Path $dest 'powershell-yaml.psm1'
           if (-not (Test-Path $psm1)) {
-            Write-Host "Directory listing for $dest:"
-            Get-ChildItem -Recurse $dest | ForEach-Object { Write-Host $_.FullName }
-            Write-Error "$psm1 not found!"
-            exit 1
+            Write-Host "Contents of $dest:"; Get-ChildItem -Recurse $dest
+            throw "couldn't find $psm1"
           }
           Import-Module $psm1 -Force
           Write-Host "Imported PowerShell.Yaml from $psm1"
@@ -76,7 +79,6 @@ jobs:
       - name: Run full-coverage Pester test
         shell: pwsh
         run: |
-          Import-Module "$(pwd)/powershell-yaml-nupkg/powershell-yaml.psm1" -Force
           Install-Module Pester -Force -Scope CurrentUser
           Invoke-Pester tests/RoundTrip.Full.Tests.ps1 -CI
 
