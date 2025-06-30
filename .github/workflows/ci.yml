@@ -25,12 +25,11 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x          # latest LTS
-        cache: true                    # turn NuGet caching on
+        dotnet-version: 8.0.x
+        cache: true
         cache-dependency-path: |
-          **/*.csproj                  # hash every C# project file …
-          **/*.fsproj                  # … and any F# projects, if present
-          **/*.sln                     # plus the solution file(s)
+          **/*.csproj
+          **/*.sln
 
     # --- restore & build -----------------------------------------------------
     - name: Restore packages
