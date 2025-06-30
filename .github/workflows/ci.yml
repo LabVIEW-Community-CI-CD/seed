@@ -1,4 +1,4 @@
-name: build‑test‑release
+name: build-test-release
 
 on:
   push:
@@ -15,124 +15,124 @@ jobs:
         shell: pwsh        # every run block uses PowerShell 7
 
     steps:
-    # --- source code ---------------------------------------------------------
-    - name: Checkout
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+      # --- source code ---------------------------------------------------------
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    # --- .NET SDK ------------------------------------------------------------
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.x
-        cache: true
-        cache-dependency-path: |
-          **/*.csproj
-          **/*.sln
+      # --- .NET SDK ------------------------------------------------------------
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+          cache: true
+          cache-dependency-path: |
+            **/*.csproj
+            **/*.sln
 
-# --- restore & build -----------------------------------------------------
-    - name: Restore packages
-      run: dotnet restore src/VipbJsonTool/VipbJsonTool.csproj
+      # --- restore & build -----------------------------------------------------
+      - name: Restore packages
+        run: dotnet restore src/VipbJsonTool/VipbJsonTool.csproj
 
-    - name: Build (warnings ≠ errors)
-      run: dotnet build src/VipbJsonTool/VipbJsonTool.csproj `
-                        -c Release `
-                        -p:TreatWarningsAsErrors=false `
-                        --no-restore
-
-    # --- publish single‑file CLI --------------------------------------------
-    - name: Publish CLI (linux‑x64 single‑file)
-      run: dotnet publish src/VipbJsonTool `
+      - name: Build (warnings ≠ errors)
+        run: dotnet build src/VipbJsonTool/VipbJsonTool.csproj `
                           -c Release `
-                          -r linux-x64 `
-                          --self-contained `
-                          -p:PublishSingleFile=true `
                           -p:TreatWarningsAsErrors=false `
-                          --no-restore `
-                          --no-build `
-                          -o publish/linux-x64
+                          --no-restore
 
-    # --- PowerShell test prerequisites --------------------------------------
-    - name: Install PowerShell modules
-      run: |
-        Install-Module PowerShell-Yaml -RequiredVersion 0.4.2 -Scope CurrentUser -Force
-        Install-Module Pester          -Scope CurrentUser -Force
+      # --- publish single-file CLI --------------------------------------------
+      - name: Publish CLI (linux-x64 single-file)
+        run: dotnet publish src/VipbJsonTool `
+                            -c Release `
+                            -r linux-x64 `
+                            --self-contained `
+                            -p:PublishSingleFile=true `
+                            -p:TreatWarningsAsErrors=false `
+                            --no-restore `
+                            --no-build `
+                            -o publish/linux-x64
 
-    - name: Generate patch template & run Pester tests
-      shell: pwsh
-      run: |
-        $vipb      = "tests/Samples/NI Icon editor.vipb"
-        $json      = "tmp.json"
-        $paths     = "all-paths.txt"
-        $patchFile = "ci-patch-full.yml"
+      # --- PowerShell test prerequisites --------------------------------------
+      - name: Install PowerShell modules
+        run: |
+          Install-Module PowerShell-Yaml -RequiredVersion 0.4.2 -Scope CurrentUser -Force
+          Install-Module Pester          -Scope CurrentUser -Force
 
-        # 1. VIPB → JSON
-        ./publish/linux-x64/VipbJsonTool vipb2json $vipb $json
+      - name: Generate patch template & run Pester tests
+        shell: pwsh
+        run: |
+          $vipb      = "tests/Samples/NI Icon editor.vipb"
+          $json      = "tmp.json"
+          $paths     = "all-paths.txt"
+          $patchFile = "ci-patch-full.yml"
 
-        # 2. Enumerate JSON paths (write reliably to disk)
-        ./tools/Enumerate-VipbPaths.ps1 $json |
-          Out-File -Encoding utf8 $paths
+          # 1. VIPB → JSON
+          ./publish/linux-x64/VipbJsonTool vipb2json $vipb $json
 
-        # 3. Sanity-check that enumeration succeeded
-        if (-not (Test-Path $paths)) {
-          Write-Error "ERROR: path enumeration failed; '$paths' not found."
-          exit 1
-        }
-        if ((Get-Content $paths).Count -eq 0) {
-          Write-Warning "WARNING: no paths enumerated (file is empty)."
-        }
+          # 2. Enumerate JSON paths (write reliably to disk)
+          ./tools/Enumerate-VipbPaths.ps1 $json |
+            Out-File -Encoding utf8 $paths
 
-        # 4. Build patch YAML, guarantee at least one entry
-        $lines = @(
-          'schema_version: 1',
-          'patch:'
-        )
-        foreach ($p in Get-Content $paths) {
-          if    ($p -match '\[\d+\]')      { $lines += "  ${p}: '__ARRAY__'" }
-          elseif($p -match '@')            { $lines += "  ${p}: 'TEST'"      }
-          elseif($p -in 'true','false')    { $lines += "  ${p}: true"        }
-          else                             { $lines += "  ${p}: 'TEST'"      }
-        }
-        if ($lines.Count -le 2) {
-          # fallback entry so patch file isn’t empty
-          $lines += '  Library_General_Settings.Company_Name.__text: ""'
-        }
-        $lines | Out-File -Encoding utf8 $patchFile
-        Write-Host "→ Wrote patch file '$patchFile' with $($lines.Count - 2) entries"
+          # 3. Sanity-check that enumeration succeeded
+          if (-not (Test-Path $paths)) {
+            Write-Error "ERROR: path enumeration failed; '$paths' not found."
+            exit 1
+          }
+          if ((Get-Content $paths).Count -eq 0) {
+            Write-Warning "WARNING: no paths enumerated (file is empty)."
+          }
 
-    - name: Sanity-check artefacts
-      run: |
-        test -f tmp.json          || (echo 'ERROR: tmp.json missing' && exit 1)
-        test -f all-paths.txt     || (echo 'ERROR: all-paths.txt missing' && exit 1)
-        test -f ci-patch-full.yml || (echo 'ERROR: patch YAML missing' && exit 1)
+          # 4. Build patch YAML, guarantee at least one entry
+          $lines = @(
+            'schema_version: 1',
+            'patch:'
+          )
+          foreach ($p in Get-Content $paths) {
+            if    ($p -match '\[\d+\]')      { $lines += "  ${p}: '__ARRAY__'" }
+            elseif($p -match '@')            { $lines += "  ${p}: 'TEST'"      }
+            elseif($p -in 'true','false')    { $lines += "  ${p}: true"        }
+            else                             { $lines += "  ${p}: 'TEST'"      }
+          }
+          if ($lines.Count -le 2) {
+            # fallback entry so patch file isn’t empty
+            $lines += '  Library_General_Settings.Company_Name.__text: ""'
+          }
+          $lines | Out-File -Encoding utf8 $patchFile
+          Write-Host "→ Wrote patch file '$patchFile' with $($lines.Count - 2) entries"
 
-    - name: Run Pester tests
-      shell: pwsh
-      run: |
-        # 1. Basic round-trip
-        Invoke-Pester tests/RoundTrip.Tests.ps1 -CI
+      - name: Sanity-check artefacts
+        run: |
+          test -f tmp.json          || (echo 'ERROR: tmp.json missing' && exit 1)
+          test -f all-paths.txt     || (echo 'ERROR: all-paths.txt missing' && exit 1)
+          test -f ci-patch-full.yml || (echo 'ERROR: patch YAML missing' && exit 1)
 
-        # 2. Full-coverage round-trip with patch
-        Invoke-Pester -CI -Script @{
-          Path       = 'tests/RoundTrip.Full.Tests.ps1'
-          Parameters = @{ PatchFile = 'ci-patch-full.yml'; SourceVipb = 'tests/Samples/NI Icon editor.vipb' }
-        }
+      - name: Run Pester tests
+        shell: pwsh
+        run: |
+          # 1. Basic round-trip
+          Invoke-Pester tests/RoundTrip.Tests.ps1 -CI
 
-        # 3. Deep selective-patch test
-        Invoke-Pester -CI -Script @{
-          Path       = 'tests/RoundTrip.Deep.Tests.ps1'
-          Parameters = @{ PatchFile = 'ci-patch-full.yml'; SourceVipb = 'tests/Samples/NI Icon editor.vipb' }
-        }
-      continue-on-error: true
+          # 2. Full-coverage round-trip with patch
+          Invoke-Pester -CI -Script @{
+            Path       = 'tests/RoundTrip.Full.Tests.ps1'
+            Parameters = @{ PatchFile = 'ci-patch-full.yml'; SourceVipb = 'tests/Samples/NI Icon editor.vipb' }
+          }
 
-    # --- Docker image (optional) --------------------------------------------
-    - name: Build Docker image
-      run: docker build -t vipb-json:${{ github.sha }} .
+          # 3. Deep selective-patch test
+          Invoke-Pester -CI -Script @{
+            Path       = 'tests/RoundTrip.Deep.Tests.ps1'
+            Parameters = @{ PatchFile = 'ci-patch-full.yml'; SourceVipb = 'tests/Samples/NI Icon editor.vipb' }
+          }
+        continue-on-error: true
 
-    # --- artefact upload -----------------------------------------------------
-    - name: Upload CLI artefact
-      uses: actions/upload-artifact@v4
-      with:
-        name: vipb-json-cli-linux-x64
-        path: publish/linux-x64/VipbJsonTool
+      # --- Docker image (optional) --------------------------------------------
+      - name: Build Docker image
+        run: docker build -t vipb-json:${{ github.sha }} .
+
+      # --- artefact upload -----------------------------------------------------
+      - name: Upload CLI artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vipb-json-cli-linux-x64
+          path: publish/linux-x64/VipbJsonTool
