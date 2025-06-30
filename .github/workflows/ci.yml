@@ -36,7 +36,9 @@ jobs:
         run: |
           Install-Module Pester -Force -Scope CurrentUser
           Register-PSRepository -Default -ErrorAction SilentlyContinue
-          Install-Module PowerShell.Yaml -Force -Scope CurrentUser
+          Install-Module PowerShellGet -Force -Scope CurrentUser -AllowClobber
+          Install-Module PowerShell.Yaml -Force -Scope CurrentUser -AllowClobber
+          Import-Module PowerShell.Yaml
           Invoke-Pester tests -CI
           Invoke-Pester tests/RoundTrip.Deep.Tests.ps1
 
