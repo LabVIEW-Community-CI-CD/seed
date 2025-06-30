@@ -59,33 +59,57 @@ jobs:
         Install-Module PowerShell-Yaml -RequiredVersion 0.4.2 -Scope CurrentUser -Force
         Install-Module Pester          -Scope CurrentUser -Force
 
-    # --- generate patch + run tests -----------------------------------------
-    - name: Generate patch & run Pester tests
+    # --- generate patch template & run Pester tests --------------------------
+    - name: Generate patch template
+      shell: pwsh
       run: |
-        # 1. Convert VIPB → JSON
-        ./publish/linux-x64/VipbJsonTool vipb2json "./tests/Samples/NI Icon editor.vipb" tmp.json
+        $vipb      = "tests/Samples/NI Icon editor.vipb"
+        $json      = "tmp.json"
+        $paths     = "all-paths.txt"
+        $patchFile = "ci-patch-full.yml"
+
+        # 1. VIPB → JSON
+        ./publish/linux-x64/VipbJsonTool vipb2json $vipb $json
 
         # 2. Enumerate JSON paths
-        ./tools/Enumerate-VipbPaths.ps1 tmp.json |
-          Out-File -Encoding utf8 all-paths.txt
+        ./tools/Enumerate-VipbPaths.ps1 $json | Set-Content $paths
 
-        # 3. Build YAML patch file (with correct indentation)
-        $patch = @('schema_version: 1', 'patch:')
-        foreach ($p in Get-Content all-paths.txt) {
-          if    ($p -match '\[\d+\]')      { $patch += "  ${p}: '__ARRAY__'" }
-          elseif($p -match '@')            { $patch += "  ${p}: 'TEST'"      }
-          elseif($p -in 'true','false')    { $patch += "  ${p}: true"        }
-          else                             { $patch += "  ${p}: 'TEST'"      }
+        # 3. Build patch YAML (guarantee at least one entry)
+        $lines = @('schema_version: 1','patch:')
+        foreach ($p in Get-Content $paths) {
+          if    ($p -match '\[\d+\]')      { $lines += "  $p: '__ARRAY__'" }
+          elseif($p -match '@')            { $lines += "  $p: 'TEST'"      }
+          elseif($p -in 'true','false')    { $lines += "  $p: true"        }
+          else                             { $lines += "  $p: 'TEST'"      }
         }
-        $patch | Out-File ci-patch-full.yml -Encoding utf8
+        if ($lines.Count -le 2) {
+          $lines += '  Library_General_Settings.Company_Name.__text: ""'
+        }
+        $lines | Set-Content -Encoding utf8 $patchFile
+        Write-Host "→ Written patch file with $($lines.Count-2) entries"
 
-        # 4. Show patch contents for debugging
-        Get-Content ci-patch-full.yml
+    - name: Sanity-check artefacts
+      run: |
+        test -f tmp.json          || (echo 'ERROR: tmp.json missing' && exit 1)
+        test -f ci-patch-full.yml || (echo 'ERROR: patch YAML missing' && exit 1)
 
-        # 5. Run tests
-        Invoke-Pester tests/RoundTrip.Full.Tests.ps1 -CI
-        Invoke-Pester tests/RoundTripSelective.Deep.Tests.ps1 -CI
+    - name: Run Pester tests
       shell: pwsh
+      run: |
+        # basic round-trip (no params)
+        Invoke-Pester tests/RoundTrip.Tests.ps1 -CI
+
+        # full-coverage + deep-patch, passing parameters correctly
+        Invoke-Pester -CI -Script @{
+          Path       = 'tests/RoundTrip.Full.Tests.ps1'
+          Parameters = @{ PatchFile = 'ci-patch-full.yml'; SourceVipb = 'tests/Samples/NI Icon editor.vipb' }
+        }
+
+        Invoke-Pester -CI -Script @{
+          Path       = 'tests/RoundTrip.Deep.Tests.ps1'
+          Parameters = @{ PatchFile = 'ci-patch-full.yml'; SourceVipb = 'tests/Samples/NI Icon editor.vipb' }
+        }
+
 
     # --- Docker image (optional) --------------------------------------------
     - name: Build Docker image
