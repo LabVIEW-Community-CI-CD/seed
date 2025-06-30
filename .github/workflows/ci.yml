@@ -29,8 +29,7 @@ jobs:
           dotnet run --project src/VipbJsonTool -- vipb2json "tests/Samples/NI Icon editor.vipb" tmp.json
 
           # 2. Enumerate every JSON path into a text file
-          .\tools\Enumerate-VipbPaths.ps1 tmp.json `
-            | Out-File -Encoding utf8 all-paths.txt
+          .\tools\Enumerate-VipbPaths.ps1 tmp.json | Out-File -Encoding utf8 all-paths.txt
 
           # 3. Build a full-coverage patch touching every path
           $yaml = @(
@@ -39,16 +38,16 @@ jobs:
           )
           foreach ($p in Get-Content all-paths.txt) {
             if ($p -match '\[\d+\]') {
-              $yaml += "  $p: '__ARRAY__'"
+              $yaml += "  $($p): '__ARRAY__'"
             }
             elseif ($p -match '@') {
-              $yaml += "  $p: 'TEST'"
+              $yaml += "  $($p): 'TEST'"
             }
             elseif ($p.EndsWith('true') -or $p.EndsWith('false')) {
-              $yaml += "  $p: true"
+              $yaml += "  $($p): true"
             }
             else {
-              $yaml += "  $p: 'TEST'"
+              $yaml += "  $($p): 'TEST'"
             }
           }
           $yaml | Out-File ci-patch-full.yml -Encoding utf8
@@ -77,11 +76,8 @@ jobs:
       - name: Run full-coverage Pester test
         shell: pwsh
         run: |
-          # ensure YAML converter & Pester
           Import-Module "$(pwd)/powershell-yaml-nupkg/powershell-yaml.psm1" -Force
           Install-Module Pester -Force -Scope CurrentUser
-
-          # execute the full depth‐coverage test
           Invoke-Pester tests/RoundTrip.Full.Tests.ps1 -CI
 
       - name: Build Action image
