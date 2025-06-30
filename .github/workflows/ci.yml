@@ -72,16 +72,17 @@ jobs:
         # 3. Build YAML patch file
         $patch = @('schema_version: 1','patch:')
         foreach ($p in Get-Content all-paths.txt) {
-          if    ($p -match '\[\d+\]')  { $patch += " $p: '__ARRAY__'" }
-          elseif($p -match '@')        { $patch += " $p: 'TEST'"      }
-          elseif($p -in 'true','false'){ $patch += " $p: true"        }
-          else                         { $patch += " $p: 'TEST'"      }
+          if    ($p -match '\[\d+\]')      { $patch += " ${p}: '__ARRAY__'" }
+          elseif($p -match '@')            { $patch += " ${p}: 'TEST'"      }
+          elseif($p -in 'true','false')    { $patch += " ${p}: true"        }
+          else                             { $patch += " ${p}: 'TEST'"      }
         }
         $patch | Out-File ci-patch-full.yml -Encoding utf8
 
         # 4. Run tests
-        Invoke-Pester tests/RoundTrip.Full.Tests.ps1      -CI
+        Invoke-Pester tests/RoundTrip.Full.Tests.ps1 -CI
         Invoke-Pester tests/RoundTripSelective.Deep.Tests.ps1 -CI
+      shell: pwsh
 
     # --- Docker image (optional) --------------------------------------------
     - name: Build Docker image
