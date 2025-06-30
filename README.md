@@ -1,3 +1,3 @@
-# JSON‑VIPB Action v1.2.0
+# JSON‑VIPB Action v1.3.0
 
-Convert NI VIPB files to JSON and back, patch, auto‑commit & PR.
+Updated patch-first support, auto commit & PR.
