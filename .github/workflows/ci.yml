@@ -22,10 +22,22 @@ jobs:
       - name: Publish self-contained single file (linux-x64)
         run: dotnet publish src/VipbJsonTool -c Release -r linux-x64 --self-contained -o publish/linux-x64-singlefile
 
-      - name: Unit tests (PowerShell)
+      - name: Prepare roundtrip files for deep patch test
+        shell: pwsh
+        run: |
+          dotnet run --project src/VipbJsonTool -- vipb2json "tests/Samples/NI Icon editor.vipb" tmp.json
+          dotnet run --project src/VipbJsonTool -- patch2vipb tmp.json tmp.vipb ci-patch.yml '' ''
+          dotnet run --project src/VipbJsonTool -- vipb2json tmp.vipb tmp2.json
+
+      - name: Install required PowerShell modules
         shell: pwsh
         run: |
           Install-Module Pester -Force -Scope CurrentUser
+          Install-Module PowerShell.Yaml -Force -Scope CurrentUser
+
+      - name: Unit tests (PowerShell)
+        shell: pwsh
+        run: |
           Invoke-Pester tests -CI
           Invoke-Pester tests/RoundTrip.Deep.Tests.ps1
 
