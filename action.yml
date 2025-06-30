@@ -1,5 +1,6 @@
+
 name: 'JSON‑VIPB'
-description: 'Convert NI VIPB files ↔ JSON, apply YAML patches, auto‑commit & PR'
+description: 'Convert NI VIPB files ↔ JSON, apply YAML patches, optionally auto‑commit & PR.'
 author: 'Sergio Velderrain Ruiz'
 inputs:
   mode:
@@ -15,22 +16,20 @@ inputs:
     description: 'Inline YAML patch string'
     required: false
   always_patch_fields:
-    description: 'YAML mapping applied every run (e.g., Company, Author)'
+    description: 'YAML mapping always applied (Company, Author, etc.)'
     required: false
   branch_name:
-    description: 'Branch name to commit results to'
+    description: 'If set, create branch & commit outputs'
     required: false
   auto_open_pr:
-    description: 'true to auto‑open PR after push'
+    description: 'true to open PR after push'
     required: false
   upload_files:
-    description: 'Newline list of files to upload as artifacts'
+    description: 'Newline‑separated list of files to upload as artifacts'
     required: false
 runs:
   using: 'docker'
   image: 'ghcr.io/svelderrainruiz/json-vipb:v1.3.0'
-  env:
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   args:
     - ${{ inputs.mode }}
     - ${{ inputs.args }}

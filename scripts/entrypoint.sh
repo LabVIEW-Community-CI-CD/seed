@@ -1,6 +1,8 @@
-#!/usr/bin/env bash
-set -eo pipefail
 
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Gather inputs
 MODE="$1"
 ARGS="$2"
 PATCH_FILE="${3:-}"
@@ -10,7 +12,7 @@ BRANCH_NAME="${6:-}"
 AUTO_PR="${7:-false}"
 UPLOAD_FILES="${8:-}"
 
-# prepare patches
+# Prepare patch files if inline YAML provided
 if [[ -n "$PATCH_YAML" ]]; then
   echo "$PATCH_YAML" > /tmp/inline_patch.yml
   PATCH_FILE="/tmp/inline_patch.yml"
@@ -22,16 +24,11 @@ else
   touch /tmp/always_patch.yml
 fi
 
-# run tool
+# Run the CLI
 VipbJsonTool "$MODE" $ARGS "$PATCH_FILE" /tmp/always_patch.yml "$BRANCH_NAME" "$AUTO_PR"
 
-# upload artifacts
+# Upload artifacts if requested
 if [[ -n "$UPLOAD_FILES" ]]; then
-  echo "$UPLOAD_FILES" | tr '\n' '\0' | while IFS= read -r -d '' f; do
-    if [[ -f "$f" ]]; then
-      tar -rvf /tmp/artifacts.tar "$f"
-    fi
-  done
-  gzip /tmp/artifacts.tar
-  echo "::set-output name=artifact::/tmp/artifacts.tar.gz"
+  tar czf /tmp/artifacts.tgz $UPLOAD_FILES || true
+  echo "::set-output name=artifact::/tmp/artifacts.tgz"
 fi
