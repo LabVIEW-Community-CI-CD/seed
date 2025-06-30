@@ -1,16 +1,14 @@
 schema_version: 1
 aliases:
-  # Basic settings
-  company_name:             .Library_General_Settings.Company_Name.__text
-  build_info:               .Library_General_Settings.Library_Version
-  package_filename:         .Library_General_Settings.Package_File_Name
-  display_icon:             .Library_General_Settings.Package_Icon
-  description:              .Advanced_Settings.Description.Description
-  destinations:             .Advanced_Settings.Destinations
-  source_file_settings:     .Advanced_Settings.Source_Files
-  # Advanced settings
-  package_dependencies:     .Advanced_Settings.Package_Dependencies
-  install_requirements:     .Advanced_Settings.Install_Requirements
-  incompatible_packages:    .Advanced_Settings.Incompatible_Packages
-  custom_actions:           .Advanced_Settings.Custom_Action_VIs
-  pre_post_build_actions:   .Advanced_Settings.Custom_Action_VIs
+  # ---------- Basic ----------
+  company_name:            .Library_General_Settings.Company_Name.__text
+  build_info:              .Library_General_Settings.Library_Version
+  package_filename:        .Library_General_Settings.Package_File_Name
+  description:             .Advanced_Settings.Description.Description
+  destinations:            .Advanced_Settings.Destinations
+  source_file_settings:    .Advanced_Settings.Source_Files
+  # ---------- Advanced ----------
+  package_dependencies:    .Advanced_Settings.Package_Dependencies
+  install_requirements:    .Advanced_Settings.Install_Requirements
+  incompatible_packages:   .Advanced_Settings.Incompatible_Packages
+  custom_actions:          .Advanced_Settings.Custom_Action_VIs
