@@ -22,23 +22,29 @@ jobs:
       - name: Publish self‑contained single file (linux‑x64)
         run: dotnet publish src/VipbJsonTool -c Release -r linux-x64 --self-contained -o publish/linux-x64-singlefile
 
-      # ---------- prepare round‑trip files for deep patch test ----------
-      - name: Generate round‑trip artefacts
+      - name: Generate round‑trip artifacts
         shell: pwsh
         run: |
           dotnet run --project src/VipbJsonTool -- vipb2json 'tests/Samples/NI Icon editor.vipb' tmp.json
           dotnet run --project src/VipbJsonTool -- patch2vipb tmp.json tmp.vipb ci-patch.yml '' ''
           dotnet run --project src/VipbJsonTool -- vipb2json tmp.vipb tmp2.json
 
-      # ---------- tests ----------
+      - name: Prepare PowerShell.Yaml for deep test
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://www.powershellgallery.com/api/v2/package/PowerShell.Yaml/0.4.2" -OutFile PowerShell.Yaml.nupkg
+          mkdir -p PowerShell.Yaml
+          Add-Type -A 'System.IO.Compression.FileSystem'
+          [IO.Compression.ZipFile]::ExtractToDirectory("PowerShell.Yaml.nupkg", "PowerShell.Yaml")
+          $yamlPath = Resolve-Path PowerShell.Yaml/tools/PowerShell.Yaml.psm1
+          Import-Module $yamlPath
+          Write-Host "PowerShell.Yaml imported from $yamlPath"
+
       - name: Run Pester tests
         shell: pwsh
         run: |
+          Import-Module (Resolve-Path PowerShell.Yaml/tools/PowerShell.Yaml.psm1)
           Install-Module Pester -Force -Scope CurrentUser
-          Register-PSRepository -Default -ErrorAction SilentlyContinue
-          Install-Module PowerShellGet -Force -Scope CurrentUser -AllowClobber
-          Install-Module PowerShell.Yaml -Force -Scope CurrentUser -AllowClobber
-          Import-Module PowerShell.Yaml
           Invoke-Pester tests -CI
           Invoke-Pester tests/RoundTrip.Deep.Tests.ps1
 
