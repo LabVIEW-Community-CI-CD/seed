@@ -32,12 +32,17 @@ jobs:
         shell: pwsh
         working-directory: ${{ github.workspace }}
         run: |
+          # debug: make sure tools/ exists
+          Write-Host "=== workspace contents ==="
+          Get-ChildItem -Recurse
+
           # 1. VIPB → JSON
           dotnet run --project src/VipbJsonTool -- vipb2json "tests/Samples/NI Icon editor.vipb" tmp.json
 
           # 2. Enumerate every JSON path
-          pwsh -NoProfile -ExecutionPolicy Bypass -File tools/Enumerate-VipbPaths.ps1 tmp.json `
-            | Out-File -Encoding utf8 all-paths.txt
+          # note the leading ./ so PS finds it in the repo root
+          pwsh -NoProfile -ExecutionPolicy Bypass -File ./tools/Enumerate-VipbPaths.ps1 tmp.json |
+            Out-File -Encoding utf8 all-paths.txt
 
           # 3. Build a full-coverage patch touching every path
           $yaml = @(
