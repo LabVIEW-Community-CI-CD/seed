@@ -1,83 +1,148 @@
-name: build-test-release
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Xml;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
+namespace VipbJsonTool
+{
+    class Program
+    {
+        static int Main(string[] args)
+        {
+            if (args.Length < 1)
+            {
+                Console.Error.WriteLine("Usage: VipbJsonTool vipb2json|json2vipb|patch2vipb <input> <output> [patchYaml]");
+                return 1;
+            }
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+            try
+            {
+                switch (args[0])
+                {
+                    case "vipb2json":
+                        Vipb2Json(args[1], args[2]);
+                        break;
+                    case "json2vipb":
+                        Json2Vipb(args[1], args[2]);
+                        break;
+                    case "patch2vipb":
+                        if (args.Length < 4) throw new ArgumentException("Missing patch YAML file");
+                        Patch2Vipb(args[1], args[2], args[3]);
+                        break;
+                    default:
+                        throw new ArgumentException($"Unknown mode '{args[0]}'");
+                }
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                return 1;
+            }
+        }
 
-      - name: Setup .NET 8
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
+        static void Vipb2Json(string vipbIn, string jsonOut)
+        {
+            var doc = new XmlDocument();
+            doc.Load(vipbIn);
+            string json = JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(jsonOut, json);
+        }
 
-      - name: Restore & build
-        run: dotnet build src/VipbJsonTool/VipbJsonTool.csproj -c Release
+        static void Json2Vipb(string jsonIn, string vipbOut)
+        {
+            // placeholder: implement your JSON→XML conversion logic here
+            string xml = JsonToXmlConverter.Convert(File.ReadAllText(jsonIn));
+            File.WriteAllText(vipbOut, xml);
+        }
 
-      - name: Publish self-contained single file (linux-x64)
-        run: |
-          dotnet publish src/VipbJsonTool -c Release -r linux-x64 \
-            --self-contained \
-            -o publish/linux-x64-singlefile
+        static void Patch2Vipb(string srcJson, string vipbOut, string patchYaml)
+        {
+            var map = PatchMap.Load(patchYaml);
+            var root = JsonNode.Parse(File.ReadAllText(srcJson)) 
+                       ?? throw new InvalidOperationException("Invalid JSON");
 
-      - name: Generate round-trip artifacts for full coverage
-        shell: pwsh
-        working-directory: ${{ github.workspace }}
-        run: |
-          # 1. VIPB → JSON
-          dotnet run --project src/VipbJsonTool -- vipb2json "tests/Samples/NI Icon editor.vipb" tmp.json
+            foreach (var kv in map.Patch)
+                ApplyPath(root, kv.Key.Split('.', StringSplitOptions.RemoveEmptyEntries), kv.Value);
 
-          # 2. Enumerate every JSON path
-          pwsh -NoProfile -ExecutionPolicy Bypass -File ./tools/Enumerate-VipbPaths.ps1 tmp.json |
-            Out-File -Encoding utf8 all-paths.txt
+            var tmp = Path.GetTempFileName();
+            File.WriteAllText(tmp, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            Json2Vipb(tmp, vipbOut);
+            File.Delete(tmp);
+        }
 
-          # 3. Build a full‐coverage patch (flat alias→value map)
-          $out = foreach ($p in Get-Content all-paths.txt) {
-            if ($p -match '\[\d+\]')       { "$p: '__ARRAY__'" }
-            elseif ($p -match '@')         { "$p: 'TEST'"       }
-            elseif ($p -in 'true','false') { "$p: true"         }
-            else                           { "$p: 'TEST'"       }
-          }
-          $out | Out-File ci-patch-full.yml -Encoding utf8
+        static void ApplyPath(JsonNode node, string[] path, JsonNode? value)
+        {
+            for (int i = 0; i < path.Length - 1; i++)
+            {
+                var key = path[i];
+                if (node[key] is not JsonObject next)
+                {
+                    next = new JsonObject();
+                    (node as JsonObject)![key] = next;
+                }
+                node = next;
+            }
 
-      - name: Prepare PowerShell.Yaml for deep test
-        shell: pwsh
-        run: |
-          $pkg = 'powershell-yaml'; $ver = '0.4.2'
-          $url = "https://www.powershellgallery.com/api/v2/package/$pkg/$ver"
-          Invoke-WebRequest -Uri $url -OutFile "$pkg.$ver.nupkg"
-          $dest = "$(pwd)/$pkg-nupkg"
-          New-Item -ItemType Directory -Force -Path $dest | Out-Null
-          Add-Type -AssemblyName 'System.IO.Compression.FileSystem'
-          [IO.Compression.ZipFile]::ExtractToDirectory("$pkg.$ver.nupkg", $dest)
+            if (node is JsonObject obj)
+                obj[path[^1]] = value;
+            else
+                throw new InvalidOperationException("Cannot apply patch to non-object node");
+        }
+    }
 
-          $psm1 = Join-Path $dest 'powershell-yaml.psm1'
-          if (-not (Test-Path $psm1)) {
-            Write-Host "Contents of $($dest):"
-            Get-ChildItem -Recurse $dest
-            throw "couldn't find $psm1"
-          }
-          Import-Module $psm1 -Force
-          Write-Host "Imported PowerShell.Yaml from $psm1"
+    class PatchMap
+    {
+        public int SchemaVersion { get; set; }
+        public Dictionary<string, JsonNode?> Patch { get; set; } = new();
 
-      - name: Run full-coverage Pester test
-        shell: pwsh
-        run: |
-          Install-Module Pester -Force -Scope CurrentUser
-          Invoke-Pester tests/RoundTrip.Full.Tests.ps1 -CI
+        public static PatchMap Load(string yamlFile)
+        {
+            var yaml = File.ReadAllText(yamlFile);
+            var des = new DeserializerBuilder()
+                        .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                        .IgnoreUnmatchedProperties()
+                        .Build();
 
-      - name: Build Action image
-        run: docker build -t vipb-json:${{ github.sha }} .
+            var dict = des.Deserialize<Dictionary<string, object>>(yaml)
+                       ?? throw new InvalidOperationException("Invalid YAML");
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: vipb-json-cli
-          path: publish/linux-x64-singlefile/VipbJsonTool
+            if (!dict.TryGetValue("schema_version", out var v) || Convert.ToInt32(v) != 1)
+                throw new InvalidOperationException("Unsupported schema_version");
+
+            if (!dict.TryGetValue("patch", out var p) || p is not Dictionary<object, object> raw)
+                throw new InvalidOperationException("Missing or invalid 'patch' section");
+
+            var map = new PatchMap();
+            foreach (var kv in raw)
+            {
+                var path = kv.Key.ToString()!;
+                JsonNode? node = kv.Value switch
+                {
+                    bool b   => JsonValue.Create(b),
+                    int i    => JsonValue.Create(i),
+                    long l   => JsonValue.Create(l),
+                    double d => JsonValue.Create(d),
+                    string s => JsonValue.Create(s),
+                    _        => JsonValue.Create(kv.Value.ToString())
+                };
+                map.Patch[path] = node;
+            }
+
+            return map;
+        }
+    }
+
+    static class JsonToXmlConverter
+    {
+        public static string Convert(string json)
+        {
+            // stub: your conversion implementation here
+            throw new NotImplementedException("Implement JSON→VIPB XML conversion");
+        }
+    }
+}
