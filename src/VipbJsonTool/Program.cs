@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using YamlDotNet.Serialization;
-using Newtonsoft.Json;                    // XML↔JSON helpers
+using Newtonsoft.Json;
 using XmlDocument = System.Xml.XmlDocument;
 using XmlWriter = System.Xml.XmlWriter;
 using XmlWriterSettings = System.Xml.XmlWriterSettings;
@@ -97,8 +97,8 @@ namespace VipbJsonTool
         {
             var catalog = new DeserializerBuilder().Build()
                 .Deserialize<AliasCatalog>(File.ReadAllText(".vipb-alias-map.yml"));
-            if (catalog.SchemaVersion != 1)
-                throw new Exception($"Unsupported alias map schema: {catalog.SchemaVersion}");
+            if (catalog.schema_version != 1)
+                throw new Exception($"Unsupported alias map schema: {catalog.schema_version}");
 
             var patches = new DeserializerBuilder().Build()
                 .Deserialize<Dictionary<string, object>>(File.ReadAllText(patchYaml));
@@ -108,7 +108,7 @@ namespace VipbJsonTool
 
             foreach (var kvp in patches)
             {
-                if (!catalog.Aliases.TryGetValue(kvp.Key, out var jqPath))
+                if (!catalog.aliases.TryGetValue(kvp.Key, out var jqPath))
                     throw new Exception($"Unknown alias '{kvp.Key}'");
 
                 ApplyPath(root, jqPath.Trim('.').Split('.'), 0, kvp.Value);
@@ -120,6 +120,7 @@ namespace VipbJsonTool
 
         static void ApplyAlwaysPatch(string jsonPath, string alwaysPatchYaml)
         {
+            if (string.IsNullOrWhiteSpace(alwaysPatchYaml)) return;
             if (new FileInfo(alwaysPatchYaml).Length == 0) return;
             PatchJson(jsonPath, jsonPath, alwaysPatchYaml);
         }
@@ -168,7 +169,7 @@ namespace VipbJsonTool
             var p = Process.Start(new ProcessStartInfo(exe, args)
             {
                 RedirectStandardOutput = true,
-                RedirectStandardError  = true
+                RedirectStandardError = true
             });
             p.WaitForExit();
             if (p.ExitCode != 0)
@@ -177,12 +178,7 @@ namespace VipbJsonTool
     }
 
     // ----------------------------------------------------------------------
-    // Alias catalogue class
+    // Alias catalogue class (all-lowercase for YAML)
     // ----------------------------------------------------------------------
-    public record AliasCatalog
-    {
-        [YamlMember(Alias = "schema_version")]
-        public int SchemaVersion { get; init; }
-        public Dictionary<string, string> Aliases { get; init; }
-    }
+
 }
