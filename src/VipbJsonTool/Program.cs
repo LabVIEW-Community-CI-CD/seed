@@ -6,8 +6,10 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using YamlDotNet.Serialization;
-using Newtonsoft.Json;
-using System.Xml;
+using Newtonsoft.Json;                    // XML↔JSON helpers
+using XmlDocument = System.Xml.XmlDocument;
+using XmlWriter = System.Xml.XmlWriter;
+using XmlWriterSettings = System.Xml.XmlWriterSettings;
 
 namespace VipbJsonTool
 {
@@ -28,12 +30,15 @@ namespace VipbJsonTool
                     case "vipb2json":
                         Vipb2Json(args[1], args[2]);
                         break;
+
                     case "json2vipb":
                         Json2Vipb(args[1], args[2]);
                         break;
+
                     case "patchjson":
                         PatchJson(args[1], args[2], args[3]);
                         break;
+
                     case "patch2vipb":
                         PatchJson(args[1], "patched.json", args[3]);
                         ApplyAlwaysPatch("patched.json", args[4]);
@@ -44,6 +49,7 @@ namespace VipbJsonTool
                         if (args.Length > 6 && args[6].Equals("true", StringComparison.OrdinalIgnoreCase))
                             OpenPullRequest(args[5]);
                         break;
+
                     default:
                         Console.Error.WriteLine($"Unknown cmd {args[0]}");
                         return 1;
@@ -57,19 +63,22 @@ namespace VipbJsonTool
             }
         }
 
+        // ------------------------------------------------------------------
+        // VIPB ↔ JSON conversion (using Newtonsoft for XML-JSON bridge)
+        // ------------------------------------------------------------------
         static void Vipb2Json(string vipbIn, string jsonOut)
         {
-            var doc = new System.Xml.XmlDocument();
+            var doc = new XmlDocument();
             doc.Load(vipbIn);
-            var json = Newtonsoft.Json.JsonConvert.SerializeXmlNode(doc, Newtonsoft.Json.Formatting.Indented, true);
+            var json = JsonConvert.SerializeXmlNode(doc, Formatting.Indented, true);
             File.WriteAllText(jsonOut, json);
         }
 
         static void Json2Vipb(string jsonIn, string vipbOut)
         {
             var json = File.ReadAllText(jsonIn);
-            var doc = Newtonsoft.Json.JsonConvert.DeserializeXmlNode(json, "VI_Package_Builder_Settings", true);
-            var settings = new System.Xml.XmlWriterSettings
+            var doc = JsonConvert.DeserializeXmlNode(json, "VI_Package_Builder_Settings", true);
+            var settings = new XmlWriterSettings
             {
                 Indent = true,
                 IndentChars = "  ",
@@ -77,10 +86,13 @@ namespace VipbJsonTool
                 OmitXmlDeclaration = true,
                 Encoding = new System.Text.UTF8Encoding(false)
             };
-            using var xw = System.Xml.XmlWriter.Create(vipbOut, settings);
+            using var xw = XmlWriter.Create(vipbOut, settings);
             doc.Save(xw);
         }
 
+        // ------------------------------------------------------------------
+        // Patch helpers
+        // ------------------------------------------------------------------
         static void PatchJson(string inJson, string outJson, string patchYaml)
         {
             var catalog = new DeserializerBuilder().Build()
@@ -101,8 +113,9 @@ namespace VipbJsonTool
 
                 ApplyPath(root, jqPath.Trim('.').Split('.'), 0, kvp.Value);
             }
+
             File.WriteAllText(outJson,
-                root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+                root.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
         }
 
         static void ApplyAlwaysPatch(string jsonPath, string alwaysPatchYaml)
@@ -113,10 +126,10 @@ namespace VipbJsonTool
 
         static void ApplyPath(JsonNode node, string[] parts, int index, object value)
         {
-            string key = parts[index];
+            var key = parts[index];
             if (index == parts.Length - 1)
             {
-                node[key] = JsonSerializer.SerializeToNode(value);
+                node[key] = System.Text.Json.JsonSerializer.SerializeToNode(value);
                 return;
             }
             if (node[key] is not JsonNode child)
@@ -127,6 +140,9 @@ namespace VipbJsonTool
             ApplyPath(child, parts, index + 1, value);
         }
 
+        // ------------------------------------------------------------------
+        // Git / PR helpers
+        // ------------------------------------------------------------------
         static void CommitAndPush(string branch, string vipbFile, string jsonFile)
         {
             Run("git", "config user.name github-actions[bot]");
@@ -149,13 +165,20 @@ namespace VipbJsonTool
 
         static void Run(string exe, string args)
         {
-            var p = Process.Start(new ProcessStartInfo(exe, args) { RedirectStandardOutput = true, RedirectStandardError = true });
+            var p = Process.Start(new ProcessStartInfo(exe, args)
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError  = true
+            });
             p.WaitForExit();
             if (p.ExitCode != 0)
                 throw new Exception($"{exe} {args}\n{p.StandardError.ReadToEnd()}");
         }
     }
 
+    // ----------------------------------------------------------------------
+    // Alias catalogue class
+    // ----------------------------------------------------------------------
     public record AliasCatalog
     {
         [YamlMember(Alias = "schema_version")]
