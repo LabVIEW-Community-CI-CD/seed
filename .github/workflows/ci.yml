@@ -12,7 +12,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0       # fetch full history so all files are present
+          fetch-depth: 0
 
       - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
@@ -23,8 +23,10 @@ jobs:
         run: dotnet build src/VipbJsonTool/VipbJsonTool.csproj -c Release
 
       - name: Publish self-contained single file (linux-x64)
-        run: dotnet publish src/VipbJsonTool -c Release -r linux-x64 \
-          --self-contained -o publish/linux-x64-singlefile
+        run: |
+          dotnet publish src/VipbJsonTool -c Release -r linux-x64 \
+            --self-contained \
+            -o publish/linux-x64-singlefile
 
       - name: Generate round-trip artifacts for full coverage
         shell: pwsh
@@ -33,28 +35,20 @@ jobs:
           # 1. VIPB → JSON
           dotnet run --project src/VipbJsonTool -- vipb2json "tests/Samples/NI Icon editor.vipb" tmp.json
 
-          # 2. Enumerate every JSON path into a text file
+          # 2. Enumerate every JSON path
           pwsh -NoProfile -ExecutionPolicy Bypass -File tools/Enumerate-VipbPaths.ps1 tmp.json `
             | Out-File -Encoding utf8 all-paths.txt
 
-          # 3. Build full-coverage patch touching every path
+          # 3. Build a full-coverage patch touching every path
           $yaml = @(
             'schema_version: 1'
             'patch:'
           )
           foreach ($p in Get-Content all-paths.txt) {
-            if ($p -match '\[\d+\]') {
-              $yaml += "  $($p): '__ARRAY__'"
-            }
-            elseif ($p -match '@') {
-              $yaml += "  $($p): 'TEST'"
-            }
-            elseif ($p -in 'true','false') {
-              $yaml += "  $($p): true"
-            }
-            else {
-              $yaml += "  $($p): 'TEST'"
-            }
+            if ($p -match '\[\d+\]')       { $yaml += "  $($p): '__ARRAY__'" }
+            elseif ($p -match '@')         { $yaml += "  $($p): 'TEST'"       }
+            elseif ($p -in 'true','false') { $yaml += "  $($p): true"         }
+            else                           { $yaml += "  $($p): 'TEST'"       }
           }
           $yaml | Out-File ci-patch-full.yml -Encoding utf8
 
