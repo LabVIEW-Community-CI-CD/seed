@@ -62,12 +62,14 @@ jobs:
     # --- generate patch + run tests -----------------------------------------
     - name: Generate patch & run Pester tests
       run: |
+        # 1. Convert VIPB → JSON
         ./publish/linux-x64/VipbJsonTool vipb2json "tests/Samples/NI Icon editor.vipb" tmp.json
 
+        # 2. Enumerate JSON paths
         ./tools/Enumerate-VipbPaths.ps1 tmp.json |
           Out-File -Encoding utf8 all-paths.txt
 
-        # Build YAML patch file with correct indentation
+        # 3. Build YAML patch file (with correct indentation)
         $patch = @('schema_version: 1', 'patch:')
         foreach ($p in Get-Content all-paths.txt) {
           if    ($p -match '\[\d+\]')      { $patch += "  ${p}: '__ARRAY__'" }
@@ -77,13 +79,10 @@ jobs:
         }
         $patch | Out-File ci-patch-full.yml -Encoding utf8
 
-        # Show the generated patch for debugging
+        # 4. Show patch contents for debugging
         Get-Content ci-patch-full.yml
 
-        # (optional) Create empty tmp_full.vipb if your tests require it and you're still debugging
-        # New-Item -ItemType File -Path tmp_full.vipb
-
-        # Run tests
+        # 5. Run tests
         Invoke-Pester tests/RoundTrip.Full.Tests.ps1 -CI
         Invoke-Pester tests/RoundTripSelective.Deep.Tests.ps1 -CI
       shell: pwsh
