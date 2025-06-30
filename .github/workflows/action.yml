@@ -1,13 +1,16 @@
-name: VIPB JSON Tool
-runs:
-  using: 'docker'
-  image: 'Dockerfile'
-  args:
-    - ${{ inputs.mode }}
-    - ${{ inputs.in }}
-    - ${{ inputs.out }}
-
+name: 'VIPB JSON Tool'
+description: 'Convert .vipb ↔ JSON, patch via alias map, branch & PR automation'
 inputs:
-  mode: { required: true }
-  in:   { required: true }
-  out:  { required: true }
+  mode:        { required: true,  description: 'vipb2json | json2vipb | patchjson | patch2vipb' }
+  in:          { required: true,  description: 'Input file'  }
+  out:         { required: true,  description: 'Output file' }
+  patch_yaml:  {                 description: 'Inline YAML patch' }
+  patch_file:  {                 description: 'Path to YAML patch file' }
+  always_patch_fields: {         description: 'YAML always‑applied patches (e.g. company_name)' }
+  branch_name: {                 description: 'Create/push branch (leave blank to skip)' }
+  auto_open_pr:{                 description: 'true to open PR after push', default: 'false' }
+  upload_files:{                 description: 'newline list of files to bundle as artifact' }
+runs:
+  using: docker
+  image: Dockerfile
+  entrypoint: /entrypoint.sh
