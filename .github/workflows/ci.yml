@@ -32,13 +32,16 @@ jobs:
       - name: Prepare PowerShell.Yaml for deep test
         shell: pwsh
         run: |
-          Invoke-WebRequest -Uri "https://www.powershellgallery.com/api/v2/package/PowerShell.Yaml/0.4.2" -OutFile PowerShell.Yaml.nupkg
-          mkdir -p PowerShell.Yaml
-          Add-Type -A 'System.IO.Compression.FileSystem'
-          [IO.Compression.ZipFile]::ExtractToDirectory("PowerShell.Yaml.nupkg", "PowerShell.Yaml")
-          $yamlPath = Resolve-Path PowerShell.Yaml/tools/PowerShell.Yaml.psm1
-          Import-Module $yamlPath
-          Write-Host "PowerShell.Yaml imported from $yamlPath"
+          $pkg  = 'powershell-yaml'
+          $ver  = '0.4.2'
+          $url  = "https://www.powershellgallery.com/api/v2/package/$pkg/$ver"
+          Invoke-WebRequest -Uri $url -OutFile "$pkg.$ver.nupkg"
+          mkdir -p $pkg
+          Add-Type -AssemblyName 'System.IO.Compression.FileSystem'
+          [IO.Compression.ZipFile]::ExtractToDirectory("$pkg.$ver.nupkg", $pkg)
+          Import-Module (Resolve-Path "$pkg/tools/PowerShell.Yaml.psm1")
+          Write-Host "PowerShell.Yaml imported successfully"
+
 
       - name: Run Pester tests
         shell: pwsh
