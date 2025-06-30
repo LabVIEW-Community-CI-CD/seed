@@ -76,7 +76,7 @@ jobs:
           [IO.Compression.ZipFile]::ExtractToDirectory("$pkg.$ver.nupkg", $dest)
           $psm1 = Join-Path $dest 'powershell-yaml.psm1'
           if (-not (Test-Path $psm1)) {
-            Write-Host "Contents of $dest:"; Get-ChildItem -Recurse $dest
+            Write-Host "Contents of ${dest}:"; Get-ChildItem -Recurse $dest
             throw "couldn't find $psm1"
           }
           Import-Module $psm1 -Force
