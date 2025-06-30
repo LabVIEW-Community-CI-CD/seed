@@ -32,37 +32,30 @@ jobs:
         shell: pwsh
         working-directory: ${{ github.workspace }}
         run: |
-          # debug: make sure tools/ exists
-          Write-Host "=== workspace contents ==="
-          Get-ChildItem -Recurse
-
-          # 1. VIPB → JSON
+          # 1. Convert VIPB to JSON
           dotnet run --project src/VipbJsonTool -- vipb2json "tests/Samples/NI Icon editor.vipb" tmp.json
 
-          # 2. Enumerate every JSON path
+          # 2. Enumerate all JSON paths
           pwsh -NoProfile -ExecutionPolicy Bypass -File ./tools/Enumerate-VipbPaths.ps1 tmp.json |
             Out-File -Encoding utf8 all-paths.txt
 
-          # 3. Build a full-coverage patch touching every path
-          $yaml = @(
+          # 3. Build schema_version:1 patch touching every path
+          $patch = @()
+          foreach ($p in Get-Content all-paths.txt) {
+            if ($p -match '\[\d+\]')       { $patch += "  $p: '__ARRAY__'" }
+            elseif ($p -match '@')         { $patch += "  $p: 'TEST'" }
+            elseif ($p -in 'true','false') { $patch += "  $p: true" }
+            else                           { $patch += "  $p: 'TEST'" }
+          }
+
+          @(
             'schema_version: 1'
             'patch:'
-          )
-          foreach ($p in Get-Content all-paths.txt) {
-            if ($p -match '\[\d+\]') {
-              $yaml += "  $($p): '__ARRAY__'"
-            }
-            elseif ($p -match '@') {
-              $yaml += "  $($p): 'TEST'"
-            }
-            elseif ($p -in 'true','false') {
-              $yaml += "  $($p): true"
-            }
-            else {
-              $yaml += "  $($p): 'TEST'"
-            }
-          }
-          $yaml | Out-File ci-patch-full.yml -Encoding utf8
+            $patch
+          ) | Out-File ci-patch-full.yml -Encoding utf8
+
+          # 4. Apply patch to create full roundtrip
+          dotnet run --project src/VipbJsonTool -- patch2vipb tmp.json tmp_full.vipb ci-patch-full.yml
 
       - name: Prepare PowerShell.Yaml for deep test
         shell: pwsh
@@ -76,7 +69,8 @@ jobs:
           [IO.Compression.ZipFile]::ExtractToDirectory("$pkg.$ver.nupkg", $dest)
           $psm1 = Join-Path $dest 'powershell-yaml.psm1'
           if (-not (Test-Path $psm1)) {
-            Write-Host "Contents of ${dest}:"; Get-ChildItem -Recurse $dest
+            Write-Host "Contents of $($dest):"
+            Get-ChildItem -Recurse $dest
             throw "couldn't find $psm1"
           }
           Import-Module $psm1 -Force
