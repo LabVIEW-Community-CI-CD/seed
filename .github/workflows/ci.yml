@@ -35,7 +35,7 @@ jobs:
         shell: pwsh
         run: |
           Install-Module Pester -Force -Scope CurrentUser
-          Register-PSRepository -Name PSGallery -SourceLocation "https://www.powershellgallery.com/api/v2" -InstallationPolicy Trusted -ErrorAction SilentlyContinue
+          Register-PSRepository -Default -ErrorAction SilentlyContinue
           Install-Module PowerShell.Yaml -Force -Scope CurrentUser
           Invoke-Pester tests -CI
           Invoke-Pester tests/RoundTrip.Deep.Tests.ps1
