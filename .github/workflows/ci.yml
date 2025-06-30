@@ -63,7 +63,7 @@ jobs:
     - name: Generate patch & run Pester tests
       run: |
         # 1. Convert VIPB → JSON
-        ./publish/linux-x64/VipbJsonTool vipb2json "tests/Samples/NI Icon editor.vipb" tmp.json
+        ./publish/linux-x64/VipbJsonTool vipb2json "./tests/Samples/NI Icon editor.vipb" tmp.json
 
         # 2. Enumerate JSON paths
         ./tools/Enumerate-VipbPaths.ps1 tmp.json |
