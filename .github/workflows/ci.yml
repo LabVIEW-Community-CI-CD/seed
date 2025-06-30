@@ -28,36 +28,30 @@ jobs:
             --self-contained \
             -o publish/linux-x64-singlefile
 
-      - name: Generate round-trip artifacts for full coverage
+      - name: Convert VIPB and generate full patch
         shell: pwsh
-        working-directory: ${{ github.workspace }}
         run: |
           # 1. Convert VIPB to JSON
           dotnet run --project src/VipbJsonTool -- vipb2json "tests/Samples/NI Icon editor.vipb" tmp.json
 
-          # 2. Enumerate all JSON paths
+          # 2. Enumerate all JSON paths to a file
           pwsh -NoProfile -ExecutionPolicy Bypass -File ./tools/Enumerate-VipbPaths.ps1 tmp.json |
             Out-File -Encoding utf8 all-paths.txt
 
-          # 3. Build schema_version:1 patch touching every path
-          $patch = @()
-          foreach ($p in Get-Content all-paths.txt) {
-            if ($p -match '\[\d+\]')       { $patch += "  $p: '__ARRAY__'" }
-            elseif ($p -match '@')         { $patch += "  $p: 'TEST'" }
-            elseif ($p -in 'true','false') { $patch += "  $p: true" }
-            else                           { $patch += "  $p: 'TEST'" }
-          }
-
-          @(
-            'schema_version: 1'
+          # 3. Build YAML patch with one test value for every path
+          $patch = @(
+            'schema_version: 1',
             'patch:'
-            $patch
-          ) | Out-File ci-patch-full.yml -Encoding utf8
+          )
+          foreach ($p in Get-Content all-paths.txt) {
+            if ($p -match '\[\d+\]')       { $patch += "  `${p}: '__ARRAY__'" }
+            elseif ($p -match '@')         { $patch += "  `${p}: 'TEST'"      }
+            elseif ($p -in 'true','false') { $patch += "  `${p}: true"        }
+            else                           { $patch += "  `${p}: 'TEST'"      }
+          }
+          $patch | Out-File ci-patch-full.yml -Encoding utf8
 
-          # 4. Apply patch to create full roundtrip
-          dotnet run --project src/VipbJsonTool -- patch2vipb tmp.json tmp_full.vipb ci-patch-full.yml
-
-      - name: Prepare PowerShell.Yaml for deep test
+      - name: Prepare PowerShell.Yaml module for tests
         shell: pwsh
         run: |
           $pkg = 'powershell-yaml'; $ver = '0.4.2'
@@ -74,18 +68,20 @@ jobs:
             throw "couldn't find $psm1"
           }
           Import-Module $psm1 -Force
-          Write-Host "Imported PowerShell.Yaml from $psm1"
+          Write-Host "PowerShell.Yaml imported from $psm1"
 
-      - name: Run full-coverage Pester test
+      - name: Run full round-trip + patch tests
         shell: pwsh
         run: |
           Install-Module Pester -Force -Scope CurrentUser
           Invoke-Pester tests/RoundTrip.Full.Tests.ps1 -CI
+          Invoke-Pester tests/RoundTripSelective.Deep.Tests.ps1 -CI
 
       - name: Build Action image
         run: docker build -t vipb-json:${{ github.sha }} .
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
         with:
           name: vipb-json-cli
           path: publish/linux-x64-singlefile/VipbJsonTool
