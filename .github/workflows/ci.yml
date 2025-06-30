@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup .NET 8
+      - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
@@ -19,22 +19,37 @@ jobs:
       - name: Restore & build
         run: dotnet build src/VipbJsonTool/VipbJsonTool.csproj -c Release
 
-      - name: Publish self‑contained single file (linux‑x64)
+      - name: Publish self-contained single file (linux-x64)
         run: dotnet publish src/VipbJsonTool -c Release -r linux-x64 --self-contained -o publish/linux-x64-singlefile
 
       - name: Generate round-trip artifacts for full coverage
         shell: pwsh
         run: |
-          dotnet run --project src/VipbJsonTool -- vipb2json 'tests/Samples/NI Icon editor.vipb' tmp.json
-          pwsh tools/Enumerate-VipbPaths.ps1 tmp.json > all-paths.txt
-          $yaml = @()
-          $yaml += 'schema_version: 1'
-          $yaml += 'patch:'
+          # 1. VIPB → JSON
+          dotnet run --project src/VipbJsonTool -- vipb2json "tests/Samples/NI Icon editor.vipb" tmp.json
+
+          # 2. Enumerate every JSON path into a text file
+          .\tools\Enumerate-VipbPaths.ps1 tmp.json `
+            | Out-File -Encoding utf8 all-paths.txt
+
+          # 3. Build a full-coverage patch touching every path
+          $yaml = @(
+            'schema_version: 1'
+            'patch:'
+          )
           foreach ($p in Get-Content all-paths.txt) {
-            if ($p -match '\[\d+\]') { $yaml += "  $p: '__ARRAY__'" }
-            elseif ($p -match '@')   { $yaml += "  $p: 'TEST'" }
-            elseif ($p.EndsWith('true') -or $p.EndsWith('false')) { $yaml += "  $p: true" }
-            else { $yaml += "  $p: 'TEST'" }
+            if ($p -match '\[\d+\]') {
+              $yaml += "  $p: '__ARRAY__'"
+            }
+            elseif ($p -match '@') {
+              $yaml += "  $p: 'TEST'"
+            }
+            elseif ($p.EndsWith('true') -or $p.EndsWith('false')) {
+              $yaml += "  $p: true"
+            }
+            else {
+              $yaml += "  $p: 'TEST'"
+            }
           }
           $yaml | Out-File ci-patch-full.yml -Encoding utf8
 
@@ -49,22 +64,24 @@ jobs:
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
           Add-Type -AssemblyName 'System.IO.Compression.FileSystem'
           [IO.Compression.ZipFile]::ExtractToDirectory("$pkg.$ver.nupkg", $dest)
-          $psm1 = Join-Path $dest "$pkg.psm1"
+          $psm1 = Join-Path $dest "powershell-yaml.psm1"
           if (-not (Test-Path $psm1)) {
-            Write-Host "File listing for ${dest}:"
+            Write-Host "Directory listing for $dest:"
             Get-ChildItem -Recurse $dest | ForEach-Object { Write-Host $_.FullName }
-            Write-Error "$psm1 not found after extraction!"
+            Write-Error "$psm1 not found!"
             exit 1
           }
           Import-Module $psm1 -Force
-          Write-Host "PowerShell.Yaml imported from $psm1"
+          Write-Host "Imported PowerShell.Yaml from $psm1"
 
       - name: Run full-coverage Pester test
         shell: pwsh
         run: |
-          $psm1 = "$(pwd)/powershell-yaml-nupkg/powershell-yaml.psm1"
-          Import-Module $psm1 -Force
+          # ensure YAML converter & Pester
+          Import-Module "$(pwd)/powershell-yaml-nupkg/powershell-yaml.psm1" -Force
           Install-Module Pester -Force -Scope CurrentUser
+
+          # execute the full depth‐coverage test
           Invoke-Pester tests/RoundTrip.Full.Tests.ps1 -CI
 
       - name: Build Action image
