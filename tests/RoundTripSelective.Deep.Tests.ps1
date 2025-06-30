@@ -1,9 +1,3 @@
-param (
-    [string]$Json1 = "tmp.json",
-    [string]$Json2 = "tmp2.json",
-    [hashtable]$PatchedFields = @{ "Library_General_Settings.Company_Name" = "SMOKETEST" }
-)
-
 function Compare-DeepJson {
     param (
         [Parameter(Mandatory)][object]$Original,
@@ -39,6 +33,12 @@ function Compare-DeepJson {
         }
     }
 }
+
+param (
+    [string]$Json1 = "tmp.json",
+    [string]$Json2 = "tmp2.json",
+    [hashtable]$PatchedFields = @{ "Library_General_Settings.Company_Name" = "SMOKETEST" }
+)
 
 Describe "VIPB deep round-trip patch test" {
     It "only changes allowed fields, and all other fields are unchanged" {
