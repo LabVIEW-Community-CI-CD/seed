@@ -73,7 +73,27 @@ jobs:
       - name: Run full round-trip + patch tests
         shell: pwsh
         run: |
+          # Install Pester if needed
           Install-Module Pester -Force -Scope CurrentUser
+
+          # Manually unpack PowerShell.Yaml
+          $pkg = 'powershell-yaml'; $ver = '0.4.2'
+          $url = "https://www.powershellgallery.com/api/v2/package/$pkg/$ver"
+          Invoke-WebRequest -Uri $url -OutFile "$pkg.$ver.nupkg"
+          $dest = "$(pwd)/$pkg-nupkg"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Add-Type -AssemblyName 'System.IO.Compression.FileSystem'
+          [IO.Compression.ZipFile]::ExtractToDirectory("$pkg.$ver.nupkg", $dest)
+          $psm1 = Join-Path $dest 'powershell-yaml.psm1'
+          if (-not (Test-Path $psm1)) {
+            Write-Host "Contents of $($dest):"
+            Get-ChildItem -Recurse $dest
+            throw "couldn't find $psm1"
+          }
+          Import-Module $psm1 -Force
+          Write-Host "PowerShell.Yaml imported from $psm1"
+
+          # Run the tests that depend on it
           Invoke-Pester tests/RoundTrip.Full.Tests.ps1 -CI
           Invoke-Pester tests/RoundTripSelective.Deep.Tests.ps1 -CI
 
