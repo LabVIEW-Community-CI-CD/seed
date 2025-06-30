@@ -1,20 +1,16 @@
+
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
     <OutputType>Exe</OutputType>
-    <ImplicitUsings>enable</ImplicitUsings>
-
-    <!-- single‑file, self‑contained -->
+    <TargetFramework>net8.0</TargetFramework>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-
-    <!-- deterministic builds -->
-    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
     <PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="YamlDotNet" Version="16.3.0" />
+    <PackageReference Include="YamlDotNet" Version="13.9.0" />
   </ItemGroup>
 </Project>
