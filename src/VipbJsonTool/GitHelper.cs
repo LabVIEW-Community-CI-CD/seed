@@ -31,7 +31,7 @@ namespace VipbJsonTool
             var repo = Environment.GetEnvironmentVariable("GITHUB_REPOSITORY");
             if (token == null || repo == null)
             {
-                Console.Error.WriteLine("GITHUB_TOKEN or GITHUB_REPOSITORY env not set – skipping push.");
+                Console.Error.WriteLine("GITHUB_TOKEN or GITHUB_REPOSITORY env not set - skipping push.");
                 return;
             }
 
@@ -42,7 +42,7 @@ namespace VipbJsonTool
             {
                 Run("git", $"add {f}");
             }
-            Run("git", "commit -m \"Automated update via JSON-VIPB Action v1.2.0\" --allow-empty");
+            Run("git", "commit -m \"Automated update via JSON-VIPB Action v1.3.0\" --allow-empty");
             Run("git", $"remote set-url origin https://x-access-token:{token}@github.com/{repo}.git");
             Run("git", $"push origin {branch} --force");
 

@@ -56,7 +56,7 @@ namespace VipbJsonTool {
                 }
 
                 if (!string.IsNullOrEmpty(branchName)) {
-                    GitHelper.CommitAndPush(branchName, new[]{inFile, outFile}, autoPr);
+                    GitHelper.CommitAndPush(branchName, new[]{inFile, outFile, patchFile}, autoPr);
                 }
 
                 return 0;
