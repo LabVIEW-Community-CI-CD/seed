@@ -39,9 +39,10 @@ jobs:
           mkdir -p $pkg
           Add-Type -AssemblyName 'System.IO.Compression.FileSystem'
           [IO.Compression.ZipFile]::ExtractToDirectory("$pkg.$ver.nupkg", $pkg)
-          $psm1 = Get-ChildItem -Recurse -Filter PowerShell.Yaml.psm1 -Path $pkg | Select-Object -First 1
-          Import-Module $psm1.FullName
-          Write-Host "PowerShell.Yaml imported from $($psm1.FullName)"
+          $psm1 = Get-ChildItem -Recurse -Filter PowerShell.Yaml.psm1 -Path $pkg | Select-Object -ExpandProperty FullName -First 1
+          if (-not $psm1) { Write-Error "PowerShell.Yaml.psm1 not found in $pkg after extraction!"; exit 1 }
+          Import-Module $psm1
+          Write-Host "PowerShell.Yaml imported from $psm1"
 
       - name: Run Pester tests
         shell: pwsh
