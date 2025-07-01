@@ -13,7 +13,7 @@ inputs:
     required: true
 runs:
   using: 'docker'
-  image: 'Dockerfile'
+  image: 'docker://ghcr.io/svelderrainruiz/json-vipb:v1.3.1'
   args:
     - ${{ inputs.input }}
     - ${{ inputs.output }}
