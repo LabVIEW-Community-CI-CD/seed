@@ -10,7 +10,7 @@ Useful for automation, code review, and integrating LabVIEW build processes with
 
 ## Features
 
-- **Convert .vipb → JSON**: Extract and serialize VI Package Build spec files for inspection or processing.
+- **Convert .vipb  → JSON**: Extract and serialize VI Package Build spec files for inspection or processing.
 - **Convert JSON → .vipb**: Generate .vipb files from machine-editable JSON for LabVIEW build automation.
 - **Easy integration**: Plug into any GitHub Actions workflow, including cross-repo and matrix jobs.
 - **Cross-platform**: Runs wherever GitHub Actions are supported.
