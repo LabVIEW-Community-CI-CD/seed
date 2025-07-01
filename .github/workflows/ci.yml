@@ -131,12 +131,12 @@ jobs:
         run: docker build -t ghcr.io/labview-community-ci-cd/seed:${{ github.sha }} .
 
       # --- Push Docker image to GHCR (main branch and tags only) --------------
-      - name: Log in to GitHub Container Registry (GHCR)
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_PAT }}
 
       - name: Tag Docker image as 'latest' and branch/tag
         run: |
