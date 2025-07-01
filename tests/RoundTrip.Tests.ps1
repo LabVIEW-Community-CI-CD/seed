@@ -3,7 +3,7 @@ param()
 Describe "VIPB round-trip equivalence via JSON" {
 
     It "serializes to JSON and back to VIPB with no data loss" {
-        $origVipb = "tests/Samples/NI Icon editor.vipb"
+        $origVipb = "./tests/Samples/NI Icon editor.vipb"
         $tmpJson1 = [IO.Path]::GetTempFileName()
         $tmpVipb2 = [IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName() + ".vipb")
         $tmpJson2 = [IO.Path]::GetTempFileName()
