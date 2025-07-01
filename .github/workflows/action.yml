@@ -1,16 +1,23 @@
-name: 'VIPB JSON Tool'
-description: 'Convert .vipb ↔ JSON, patch via alias map, branch & PR automation'
+name: 'json-vipb'
+description: 'Convert JSON <-> VIPB for LabVIEW packages'
+author: 'Sergio Velderrain Ruiz'
 inputs:
-  mode:        { required: true,  description: 'vipb2json | json2vipb | patchjson | patch2vipb' }
-  in:          { required: true,  description: 'Input file'  }
-  out:         { required: true,  description: 'Output file' }
-  patch_yaml:  {                 description: 'Inline YAML patch' }
-  patch_file:  {                 description: 'Path to YAML patch file' }
-  always_patch_fields: {         description: 'YAML always‑applied patches (e.g. company_name)' }
-  branch_name: {                 description: 'Create/push branch (leave blank to skip)' }
-  auto_open_pr:{                 description: 'true to open PR after push', default: 'false' }
-  upload_files:{                 description: 'newline list of files to bundle as artifact' }
+  input:
+    description: 'Path to the input file (JSON or VIPB)'
+    required: true
+  output:
+    description: 'Path to the output file (VIPB or JSON)'
+    required: true
+  direction:
+    description: 'Conversion direction: to-json or to-vipb'
+    required: true
 runs:
-  using: docker
-  image: Dockerfile
-  entrypoint: /entrypoint.sh
+  using: 'docker'
+  image: 'Dockerfile'
+  args:
+    - ${{ inputs.input }}
+    - ${{ inputs.output }}
+    - ${{ inputs.direction }}
+branding:
+  icon: 'archive'
+  color: 'blue'
