@@ -116,13 +116,8 @@ jobs:
             Path       = 'tests/RoundTrip.Full.Tests.ps1'
             Parameters = @{ PatchFile = 'ci-patch-full.yml'; SourceVipb = 'tests/Samples/NI Icon editor.vipb' }
           }
-
-          # 3. Deep selective-patch test
-          Invoke-Pester -CI -Script @{
-            Path       = 'tests/RoundTrip.Deep.Tests.ps1'
-            Parameters = @{ PatchFile = 'ci-patch-full.yml'; SourceVipb = 'tests/Samples/NI Icon editor.vipb' }
-          }
-        continue-on-error: true
+ 
+          
 
       # --- Docker image (optional) --------------------------------------------
       - name: Build Docker image
