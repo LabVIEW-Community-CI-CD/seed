@@ -60,7 +60,7 @@ jobs:
       - name: Generate patch template & run Pester tests
         shell: pwsh
         run: |
-          $vipb      = "./tests/Samples/NI Icon editor.vipb"
+          $vipb      = "tests/Samples/NI Icon editor.vipb"
           $json      = "tmp.json"
           $paths     = "all-paths.txt"
           $patchFile = "ci-patch-full.yml"
