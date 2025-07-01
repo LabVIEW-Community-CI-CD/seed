@@ -128,7 +128,28 @@ jobs:
 
       # --- Docker image (optional) --------------------------------------------
       - name: Build Docker image
-        run: docker build -t vipb-json:${{ github.sha }} .
+        run: docker build -t ghcr.io/${{ github.repository }}:${{ github.sha }} .
+
+      # --- Push Docker image to GHCR (main branch and tags only) --------------
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag Docker image as 'latest' and branch/tag
+        run: |
+          docker tag ghcr.io/${{ github.repository }}:${{ github.sha }} ghcr.io/${{ github.repository }}:latest
+          # Tag as branch or tag name (for easier human reference)
+          docker tag ghcr.io/${{ github.repository }}:${{ github.sha }} ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+
+      - name: Push Docker images
+        run: |
+          docker push ghcr.io/${{ github.repository }}:${{ github.sha }}
+          docker push ghcr.io/${{ github.repository }}:latest
+          docker push ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+
 
       # --- artefact upload -----------------------------------------------------
       - name: Upload CLI artefact
