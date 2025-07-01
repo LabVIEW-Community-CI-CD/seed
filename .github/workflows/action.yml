@@ -13,7 +13,7 @@ inputs:
     required: true
 runs:
   using: 'docker'
-  image: 'docker://ghcr.io/labview-community-ci-cd/seed:v1.3.1'
+  image: 'docker://ghcr.io/labview-community-ci-cd/seed:v1.3.2'
   args:
     - ${{ inputs.input }}
     - ${{ inputs.output }}
