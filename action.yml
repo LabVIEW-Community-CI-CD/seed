@@ -1,23 +1,36 @@
-name: 'json-vipb'
-description: 'Convert JSON <-> VIPB for LabVIEW packages'
-author: 'Sergio Velderrain Ruiz'
 inputs:
+  mode:
+    description: 'Conversion mode: json2vipb, vipb2json, etc.'
+    required: true
   input:
-    description: 'Path to the input file (JSON or VIPB)'
+    description: 'Path to input file'
     required: true
   output:
-    description: 'Path to the output file (VIPB or JSON)'
+    description: 'Path to output file'
     required: true
-  direction:
-    description: 'Conversion direction: to-json or to-vipb'
-    required: true
+  patch_file:
+    required: false
+  patch_yaml:
+    required: false
+  always_patch:
+    required: false
+  branch_name:
+    required: false
+  auto_pr:
+    required: false
+  upload_files:
+    required: false
+
 runs:
   using: 'docker'
   image: 'docker://ghcr.io/labview-community-ci-cd/seed:main'
   args:
+    - ${{ inputs.mode }}
     - ${{ inputs.input }}
     - ${{ inputs.output }}
-    - ${{ inputs.direction }}
-branding:
-  icon: 'archive'
-  color: 'blue'
+    - ${{ inputs.patch_file }}
+    - ${{ inputs.patch_yaml }}
+    - ${{ inputs.always_patch }}
+    - ${{ inputs.branch_name }}
+    - ${{ inputs.auto_pr }}
+    - ${{ inputs.upload_files }}

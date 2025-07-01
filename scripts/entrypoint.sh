@@ -3,31 +3,26 @@ set -euo pipefail
 
 # Gather inputs from Docker args
 MODE="$1"
-ARGS="$2"
-PATCH_FILE="${3:-}"
-PATCH_YAML="${4:-}"
-ALWAYS_PATCH="${5:-}"
-BRANCH_NAME="${6:-}"
-AUTO_PR="${7:-false}"
-UPLOAD_FILES="${8:-}"
-
-# Parse ARGS into input/output files (assumes "input output")
-INPUT_FILE="$(echo $ARGS | awk '{print $1}')"
-OUTPUT_FILE="$(echo $ARGS | awk '{print $2}')"
+INPUT="$2"
+OUTPUT="$3"
+PATCH_FILE="${4:-}"
+PATCH_YAML="${5:-}"
+ALWAYS_PATCH="${6:-}"
+BRANCH_NAME="${7:-}"
+AUTO_PR="${8:-false}"
+UPLOAD_FILES="${9:-}"
 
 # Robust argument checks
 if [[ -z "$MODE" ]]; then
   echo "::error ::Missing required argument: MODE (should be 'json2vipb' or similar)" >&2
   exit 1
 fi
-
-if [[ -z "$INPUT_FILE" ]] || [[ -z "$OUTPUT_FILE" ]]; then
-  echo "::error ::Missing required input or output file argument in: '$ARGS'" >&2
+if [[ -z "$INPUT" ]] || [[ -z "$OUTPUT" ]]; then
+  echo "::error ::Missing required input or output file argument." >&2
   exit 1
 fi
-
-if [[ ! -f "$INPUT_FILE" ]]; then
-  echo "::error ::Input file '$INPUT_FILE' does not exist." >&2
+if [[ ! -f "$INPUT" ]]; then
+  echo "::error ::Input file '$INPUT' does not exist." >&2
   exit 1
 fi
 
@@ -44,7 +39,7 @@ else
 fi
 
 # Run the CLI tool with all relevant arguments
-VipbJsonTool "$MODE" $ARGS "$PATCH_FILE" /tmp/always_patch.yml "$BRANCH_NAME" "$AUTO_PR"
+VipbJsonTool "$MODE" "$INPUT" "$OUTPUT" "$PATCH_FILE" /tmp/always_patch.yml "$BRANCH_NAME" "$AUTO_PR"
 
 # Upload artifacts if requested
 if [[ -n "$UPLOAD_FILES" ]]; then
