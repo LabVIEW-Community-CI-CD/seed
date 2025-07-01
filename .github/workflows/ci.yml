@@ -68,9 +68,29 @@ jobs:
           # 1. VIPB → JSON
           ./publish/linux-x64/VipbJsonTool vipb2json $vipb $json
 
-          # 2. Enumerate JSON paths (write reliably to disk)
-          ./tools/Enumerate-VipbPaths.ps1 $json |
-            Out-File -Encoding utf8 $paths
+          # 2. Enumerate JSON paths (in-memory for reliability)
+           $jsonObj  = Get-Content $json -Raw | ConvertFrom-Json
+           $allPaths = New-Object System.Collections.Generic.List[string]
+           function Add-Paths ($obj, $prefix = "") {
+             if ($obj -is [System.Collections.IDictionary]) {
+               foreach ($k in $obj.Keys) {
+                 Add-Paths $obj[$k] ($prefix ? "$prefix.$k" : $k)
+               }
+             }
+             elseif ($obj -is [System.Collections.IEnumerable] -and $obj -isnot [string]) {
+               $i = 0
+               foreach ($v in $obj) {
+                 Add-Paths $v ($prefix ? "$prefix[$i]" : "[$i]")
+                 $i++
+               }
+             }
+             else {
+               if ($prefix) { [void] $allPaths.Add($prefix) }
+             }
+           }
+           Add-Paths $jsonObj ""
+           $allPaths = $allPaths | Sort-Object -Unique
+           $allPaths | Out-File -Encoding utf8 $paths
 
           # 3. Sanity-check that enumeration succeeded
           if (-not (Test-Path $paths)) {
@@ -112,13 +132,11 @@ jobs:
           Invoke-Pester tests/RoundTrip.Tests.ps1 -CI
 
           # 2. Full-coverage round-trip with patch
-          Invoke-Pester -CI -Script @{
-            Path       = 'tests/RoundTrip.Full.Tests.ps1'
-            Parameters = @{ PatchFile = 'ci-patch-full.yml'; SourceVipb = 'tests/Samples/NI Icon editor.vipb' }
-          }
+           Invoke-Pester -CI -Script @{
+             Path       = 'tests/RoundTrip.Full.Tests.ps1'
+             Parameters = @{ SourceVipb = 'tests/Samples/NI Icon editor.vipb' }
+           }
  
-          
-
       # --- Docker image (optional) --------------------------------------------
       - name: Build Docker image
         run: docker build -t ghcr.io/labview-community-ci-cd/seed:${{ github.sha }} .

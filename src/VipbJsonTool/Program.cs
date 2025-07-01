@@ -56,7 +56,8 @@ namespace VipbJsonTool {
                 }
 
                 if (!string.IsNullOrEmpty(branchName)) {
-                    GitHelper.CommitAndPush(branchName, new[]{inFile, outFile, patchFile}, autoPr);
+                    // Do not commit patch YAML files (always generated dynamically)
+                    GitHelper.CommitAndPush(branchName, new[] { inFile, outFile }, autoPr);
                 }
 
                 return 0;

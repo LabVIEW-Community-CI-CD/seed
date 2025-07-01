@@ -12,6 +12,7 @@ COPY --from=build /app /usr/local/bin
 
 # Copy entrypoint and guarantee it's executable
 COPY scripts/entrypoint.sh /entrypoint.sh
+COPY .vipb-alias-map.yml /workspace/vipb-alias-map.yml
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]

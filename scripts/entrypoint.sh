@@ -41,6 +41,12 @@ fi
 # Run the CLI tool with all relevant arguments
 VipbJsonTool "$MODE" "$INPUT" "$OUTPUT" "$PATCH_FILE" /tmp/always_patch.yml "$BRANCH_NAME" "$AUTO_PR"
 
+# If debug flag is set, output the alias schema for troubleshooting
+if [[ "${DEBUG_PRINT_ALIAS:-}" == "true" ]]; then
+  echo "Alias schema and mappings:"
+  cat /workspace/vipb-alias-map.yml || echo "(Alias map file not found)"
+fi
+
 # Upload artifacts if requested
 if [[ -n "$UPLOAD_FILES" ]]; then
   tar czf /tmp/artifacts.tgz $UPLOAD_FILES || true
