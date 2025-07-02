@@ -57,41 +57,42 @@ jobs:
       - name: Install Pester
         run: Install-Module Pester -Force -Scope CurrentUser
 
-      # --- Run tests (BASIC & GOLDEN SAMPLE) -----------------------------------
-      - name: Run Pester tests (Basic and Full Golden Sample Coverage)
+      # --- Run CLI round-trip tests (VIPB & LVPROJ, all modes) -----------------
+      - name: Run CLI conversion tests (VIPB and LVPROJ round-trip)
+        run: |
+          # VIPB legacy modes
+          dotnet run --project src/VipbJsonTool vipb2json tests/Samples/seed.vipb tests/tmp/seed.vipb.json
+          dotnet run --project src/VipbJsonTool json2vipb tests/tmp/seed.vipb.json tests/tmp/seed.vipb.roundtrip
+
+          # LVPROJ new modes
+          dotnet run --project src/VipbJsonTool lvproj2json tests/Samples/seed.lvproj tests/tmp/seed.lvproj.json
+          dotnet run --project src/VipbJsonTool json2lvproj tests/tmp/seed.lvproj.json tests/tmp/seed.lvproj.roundtrip
+
+          # Unified wrapper modes (should work identically)
+          dotnet run --project src/VipbJsonTool buildspec2json tests/Samples/seed.vipb tests/tmp/seed.vipb.json
+          dotnet run --project src/VipbJsonTool json2buildspec tests/tmp/seed.vipb.json tests/tmp/seed.vipb.roundtrip
+          dotnet run --project src/VipbJsonTool buildspec2json tests/Samples/seed.lvproj tests/tmp/seed.lvproj.json
+          dotnet run --project src/VipbJsonTool json2buildspec tests/tmp/seed.lvproj.json tests/tmp/seed.lvproj.roundtrip
+
+          # Optionally, diff original and roundtripped outputs (or use Pester scripts)
+
+      # --- Run Pester tests ----------------------------------------------------
+      - name: Run Pester tests (Basic and Golden Sample)
         run: |
           $failures = $false
-
           $resultBasic = Invoke-Pester -Configuration @{
-            Run = @{
-              Path      = 'tests/RoundTrip.Tests.ps1'
-              PassThru  = $true
-            }
-            TestResult = @{
-              Enabled      = $true
-              OutputFormat = 'NUnitXml'
-              OutputPath   = 'basic-test-results.xml'
-            }
+            Run = @{ Path = 'tests/RoundTrip.Tests.ps1'; PassThru = $true }
+            TestResult = @{ Enabled = $true; OutputFormat = 'NUnitXml'; OutputPath = 'basic-test-results.xml' }
           }
           if ($resultBasic.FailedCount -gt 0) { $failures = $true }
-
           $resultGolden = Invoke-Pester -Configuration @{
-            Run = @{
-              Path       = 'tests/RoundTrip.GoldenSample.Tests.ps1'
-              # SourceFile parameter will default to tests/Samples/seed.vipb if not provided
-              # (Can override via -Parameters if needed, but default is used here)
-              PassThru   = $true
-            }
-            TestResult = @{
-              Enabled      = $true
-              OutputFormat = 'NUnitXml'
-              OutputPath   = 'golden-sample-results.xml'
-            }
+            Run = @{ Path = 'tests/RoundTrip.GoldenSample.Tests.ps1'; PassThru = $true }
+            TestResult = @{ Enabled = $true; OutputFormat = 'NUnitXml'; OutputPath = 'golden-sample-results.xml' }
           }
           if ($resultGolden.FailedCount -gt 0) { $failures = $true }
-
           if ($failures) { exit 1 }
 
+      # --- Upload Test Results --------------------------------------------------
       - name: Upload Test Results
         if: always()    # always upload, even on failure or PR, for debugging
         uses: actions/upload-artifact@v4
@@ -117,6 +118,7 @@ jobs:
         if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
         run: |
           docker tag ghcr.io/labview-community-ci-cd/seed:${{ github.sha }} ghcr.io/labview-community-ci-cd/seed:latest
+          docker tag ghcr.io/labview-community-ci-cd/seed:${{ github.sha }} ghcr.io/labview-community-ci-cd/seed:v2
           docker tag ghcr.io/labview-community-ci-cd/seed:${{ github.sha }} ghcr.io/labview-community-ci-cd/seed:${{ github.ref_name }}
 
       - name: Push Docker images
@@ -124,6 +126,7 @@ jobs:
         run: |
           docker push ghcr.io/labview-community-ci-cd/seed:${{ github.sha }}
           docker push ghcr.io/labview-community-ci-cd/seed:latest
+          docker push ghcr.io/labview-community-ci-cd/seed:v2
           docker push ghcr.io/labview-community-ci-cd/seed:${{ github.ref_name }}
 
       # --- artifact upload (CLI binary) ----------------------------------------
