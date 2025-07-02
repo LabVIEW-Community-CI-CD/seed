@@ -20,43 +20,43 @@ runs:
 
 inputs:
   mode:
-    description: 'Conversion mode: vipb2json or json2vipb'
+    description: "Conversion mode: vipb2json, json2vipb, lvproj2json, or json2lvproj. (Use 'vipb2json'/'json2vipb' for VI Package Build specs; 'buildspec2json' and 'json2buildspec' are accepted as aliases.)"
     required: true
   input:
-    description: 'Input file path'
+    description: "Input file path"
     required: true
   output:
-    description: 'Output file path'
+    description: "Output file path"
     required: true
   patch_file:
-    description: 'Path to a file to patch'
+    description: "Path to a file to patch"
     required: false
   patch_yaml:
-    description: 'Path to a YAML patch file'
+    description: "Path to a YAML patch file"
     required: false
   always_patch:
-    description: 'Force patch even if target fields are absent'
+    description: "Force patch even if target fields are absent"
     required: false
     default: false
   branch_name:
-    description: 'Name of branch for patches or commits'
+    description: "Name of branch for patches or commits"
     required: false
   auto_pr:
-    description: 'Automatically create a PR after commit'
+    description: "Automatically create a PR after commit"
     required: false
     default: false
   upload_files:
-    description: 'Upload resulting files as workflow artifacts'
+    description: "Upload resulting files as workflow artifacts"
     required: false
     default: true
   seed_lvproj:
-    description: 'If true, seed a .lvproj from tests/Samples/seed.lvproj if missing'
+    description: "If true, seed a .lvproj from tests/Samples/seed.lvproj if missing"
     required: false
     default: false
   seed_vipb:
-    description: 'If true, seed a .vipb from tests/Samples/seed.vipb if missing'
+    description: "If true, seed a .vipb from tests/Samples/seed.vipb if missing"
     required: false
     default: false
   tag:
-    description: 'Git tag name for the release (used to name the seeding branch). Required when seed_lvproj or seed_vipb is true.'
+    description: "Git tag name for the release (used to name the seeding branch). Required when seed_lvproj or seed_vipb is true."
     required: false

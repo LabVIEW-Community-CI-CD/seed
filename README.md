@@ -6,39 +6,39 @@ This GitHub Action automates conversion, patching, and seeding processes for Lab
 
 The action supports the following primary functionalities:
 
-1. **Conversion**: Convert between `.vipb` (VI Package Build) and JSON formats, facilitating easy tracking, version control, and automation of package specifications.
-2. **Patching**: Apply modifications to existing `.vipb` or JSON files via simple patch files or YAML-defined patches.
-3. **Seeding**: Automatically create initial `.lvproj` and `.vipb` files from predefined templates if they don't exist, essential for initializing projects quickly and consistently.
+1. **Conversion** – Convert between `.vipb` (VI Package Build) or `.lvproj` (LabVIEW Project) and JSON formats, facilitating easy tracking, version control, and automated edits.
+2. **Patching** – Apply modifications to existing `.vipb`, `.lvproj`, or JSON files via diff patches or YAML-defined patches.
+3. **Seeding** – Automatically create initial `.lvproj` and/or `.vipb` files from predefined templates when they don’t exist, ensuring projects start with known-good “golden” files.
 
 ## Inputs Reference
 
-| Name           | Required | Default | Description                                                                                                          |
-| -------------- | -------- | ------- | -------------------------------------------------------------------------------------------------------------------- |
-| `mode`         | yes      |         | Conversion mode: specify either `vipb2json` (VI Package Build to JSON) or `json2vipb` (JSON to VI Package Build).    |
-| `input`        | yes      |         | Path to the input file (the file being converted or patched).                                                        |
-| `output`       | yes      |         | Path to the output file (where the result will be saved).                                                            |
-| `patch_file`   | no       |         | Path to a simple file containing patch operations (typically diff/patch files).                                      |
-| `patch_yaml`   | no       |         | Path to a YAML-formatted file specifying structured patch operations. Requires `yq` tool installed.                  |
-| `always_patch` | no       | false   | Force patching even if targeted fields are absent, allowing more aggressive file modification.                       |
-| `branch_name`  | no       |         | Specify a branch name explicitly for committing or pull request operations.                                          |
-| `auto_pr`      | no       | false   | When enabled (`true`), automatically opens a pull request after committing changes. Requires GitHub CLI (`gh`).      |
-| `upload_files` | no       | true    | If enabled (`true`), uploads the generated or patched files as artifacts to the workflow run.                        |
-| `seed_lvproj`  | no       | false   | Automatically seeds a LabVIEW project file (`.lvproj`) using the template in `tests/Samples/seed.lvproj` if missing. |
-| `seed_vipb`    | no       | false   | Automatically seeds a VI Package build spec file (`.vipb`) from `tests/Samples/seed.vipb` if missing.                |
-| `tag`          | no¹      |         | Git tag name for identifying the specific release or state. Required when using `seed_lvproj` or `seed_vipb`.        |
+| Name           | Required | Default | Description                                                                                                                                      |
+| -------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `mode`         | yes      |         | Conversion mode: `vipb2json`, `json2vipb`, `lvproj2json`, or `json2lvproj`. (Aliases `buildspec2json` and `json2buildspec` also accepted.)       |
+| `input`        | yes      |         | Path to the input file (VIPB, LVPROJ, or JSON).                                                                                                  |
+| `output`       | yes      |         | Path to the output file (VIPB, LVPROJ, or JSON, depending on mode).                                                                              |
+| `patch_file`   | no       |         | Path to a Unix-style diff/patch file to apply after conversion.                                                                                  |
+| `patch_yaml`   | no       |         | Path to a YAML merge patch file (requires `yq`).                                                                                                 |
+| `always_patch` | no       | `false` | If `true`, apply patches even when target fields are missing.                                                                                    |
+| `branch_name`  | no       |         | Branch name to commit generated changes.                                                                                                         |
+| `auto_pr`      | no       | `false` | If `true`, automatically open a pull request after committing (requires GitHub CLI `gh`).                                                        |
+| `upload_files` | no       | `true`  | Upload generated files as workflow artifacts.                                                                                                    |
+| `seed_lvproj`  | no       | `false` | If `true`, seed a project file (`seed.lvproj`) from `tests/Samples/seed.lvproj` if it doesn’t exist.                                             |
+| `seed_vipb`    | no       | `false` | If `true`, seed a build-spec file (`build/buildspec.vipb`) from `tests/Samples/seed.vipb` if it doesn’t exist.                                   |
+| `tag`¹         | no       |         | Git tag used to name the seeding branch (`seed-<tag>`). **Required** when `seed_lvproj` or `seed_vipb` is `true`.                                |
 
-> ¹ **Important**: The `tag` parameter becomes mandatory whenever either `seed_lvproj` or `seed_vipb` is set to `true`.
+> ¹ **Important:** `tag` must be supplied whenever seeding is enabled.
+
+---
 
 ## Comprehensive Seeding Example
 
-Below is a complete example illustrating how to leverage the seeding capability within your GitHub Actions workflow:
-
 ```yaml
-name: Seed LabVIEW Project and VIPB
+name: Seed LabVIEW Project and Build Specification
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*'         # Trigger on any tag push like v1.2.3
 
 jobs:
   seed-files:
@@ -46,30 +46,48 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Seed LabVIEW Project and Build Specification
+      - name: Seed LabVIEW project & VIPB
         uses: LabVIEW-Community-CI-CD/seed@v2.0.0
         with:
-          mode: vipb2json               # Dummy mode for compatibility; not utilized in seeding mode.
-          input: dummy.vipb             # Placeholder; not utilized during seeding.
-          output: dummy.json            # Placeholder; not utilized during seeding.
-          seed_lvproj: true             # Enables automatic seeding of the .lvproj file.
-          seed_vipb: true               # Enables automatic seeding of the .vipb file.
-          tag: ${{ github.ref_name }}   # Automatically use the tag name from the triggering event.
+          mode: vipb2json            # Dummy mode – ignored during seeding
+          input: dummy.vipb          # Placeholder
+          output: dummy.json         # Placeholder
+          seed_lvproj: true          # Create seed.lvproj if missing
+          seed_vipb: true           # Create build/buildspec.vipb if missing
+          tag: ${{ github.ref_name }}
 ```
 
-This workflow step will:
+**What happens?**
 
-* Automatically check for the existence of the LabVIEW project file (`seed.lvproj`) at the repository root. If absent, it creates the file based on a predefined golden template.
-* Check for the existence of the VI Package build specification (`build/buildspec.vipb`). If missing, it seeds the file from a predefined golden template.
-* Commit these newly created files directly to a dedicated branch named `seed-<tag>`, clearly indicating their association with the specific release or tag. This operation does not automatically open a pull request, giving you full control over subsequent integration steps.
+1. If `seed.lvproj` is missing, the action copies `tests/Samples/seed.lvproj` to the repo root.
+2. If `build/buildspec.vipb` is missing, the action copies `tests/Samples/seed.vipb` to that path.
+3. Both files are committed to a new branch `seed-<tag>` (e.g., `seed-v1.2.3`).  
+4. No pull request is opened unless `auto_pr: true` is set.
 
-## AI-Guidance Considerations
+---
 
-When leveraging this documentation with AI assistance:
+## AI-Guidance Tips
 
-* Explicitly specify each parameter based on your project's needs. Provide clear context around your project's structure, repository standards, and CI/CD strategies.
-* Use provided examples as templates, clearly marking placeholders (`dummy.vipb`, `dummy.json`) as irrelevant for seeding operations.
-* Highlight the dependency requirements (like `yq` and `gh`) clearly to avoid runtime issues.
-* Clearly document and describe intended behavior for branching, tagging, and artifact uploading to align AI-generated recommendations closely with your workflow requirements.
+When using AI tools to author or modify workflows:
 
-Following these guidelines ensures that AI assistance effectively guides you through implementing and maintaining LabVIEW projects within a robust and automated CI/CD pipeline.
+- **Clarify parameters** – Provide concrete file paths and desired modes to avoid ambiguity.
+- **Highlight dependencies** – Ensure runners (or the Docker image) include `yq` for YAML patches and `gh` for PR operations.
+- **Explain your branching strategy** – Document how `branch_name`, `tag`, and `auto_pr` interplay so automated suggestions remain consistent with your repo policies.
+
+---
+
+## Troubleshooting Docker Builds
+
+If the action’s Docker build fails:
+
+1. Verify `entrypoint.sh` is executable (`chmod +x entrypoint.sh`).
+2. Ensure all wrapper scripts (`bin/*`) are in place and executable.
+3. Confirm conversion binary `VipbJsonTool` is present in `bin/` and has execution permissions.
+4. Double-check sample files exist:
+   ```
+   tests/Samples/seed.lvproj
+   tests/Samples/seed.vipb
+   ```
+5. Re-run `docker build .` and inspect any missing-file errors.
+
+These steps resolve most “file not found” or permission issues during image creation.
