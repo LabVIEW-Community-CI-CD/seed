@@ -47,7 +47,7 @@ Describe "VIPB round‑trip fidelity – smoke" {
         #############################
         $vipb       = "tests/Samples/NI Icon editor.vipb"
         $json1      = [IO.Path]::GetTempFileName()
-        $vipbRound  = [IO.Path]::GetTempPath() + (New‑Guid).Guid + ".vipb"
+        $vipbRound  = [IO.Path]::GetTempPath() + ([guid]::NewGuid().Guid) + ".vipb"
         $json2      = [IO.Path]::GetTempFileName()
 
         try {
