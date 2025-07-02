@@ -136,6 +136,20 @@ Describe "Golden Sample Full Coverage — $SourceFile" {
                 else { $patchMap[$p] = '__PATCHED__' }
             }
 
+            if ($patchMap.Count -eq 0) {
+                Write-Host "No patchable fields found! Doing no-op round-trip check instead."
+                $vipbOut = [IO.Path]::GetTempPath() + ([guid]::NewGuid()).Guid + ".vipb"
+                $jsonOut = [IO.Path]::GetTempFileName()
+
+                & ./publish/linux-x64/VipbJsonTool json2vipb $jsonOrig $vipbOut
+                & ./publish/linux-x64/VipbJsonTool vipb2json $vipbOut $jsonOut
+
+                $round = Get-Content $jsonOut -Raw | ConvertFrom-Json
+                Compare-AfterPatch $orig $round @{}
+                Remove-Item $vipbOut, $jsonOut -ErrorAction SilentlyContinue
+                return
+            }
+
             # --- emit YAML file ---
             $yaml = @("schema_version: 1","patch:")
             foreach ($k in $patchMap.Keys) {
