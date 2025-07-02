@@ -1,14 +1,31 @@
+<#
+  RoundTrip.GoldenSample.Tests.ps1
+  --------------------------------
+  Full‑fidelity round‑trip test for seed.vipb.
+
+  1. Convert the VIPB to JSON.
+  2. Enumerate every patch‑able JSON leaf path.
+  3. Build a YAML patch that changes every such path.
+  4. Apply the patch, convert patched VIPB back to JSON.
+  5. Verify:
+       • Patched paths changed to the expected value.
+       • All other paths remained identical.
+#>
+
 param([string]$SourceFile = "tests/Samples/seed.vipb")
 
 Describe "Golden Sample Full Coverage — $SourceFile" {
 
     It "enumerates all patchable aliases, patches them, and validates round‑trip" {
 
+        ###############################################################
         function Join-IfArray($v) {
-            if ($v -is [System.Collections.IEnumerable] -and $v -isnot [string]) { @($v) -join '' } else { $v }
+            if ($v -is [System.Collections.IEnumerable] -and $v -isnot [string]) {
+                @($v) -join ''
+            } else { $v }
         }
 
-        ############# NON‑RECURSIVE LEAF ENUMERATION #############
+        ###########  NON‑RECURSIVE JSON LEAF ENUMERATION  #############
         function Get-LeafPaths([object]$obj) {
             $stack = [System.Collections.Stack]::new()
             $stack.Push([pscustomobject]@{ Node = $obj; Path = "" })
@@ -37,11 +54,32 @@ Describe "Golden Sample Full Coverage — $SourceFile" {
             }
             return $out
         }
-        ##########################################################
 
+        ###############  SAFE JSON PATH VALUE LOOK‑UP  ################
+        function Get-ByPath($obj, [string]$path) {
+            $cur = $obj
+            foreach ($seg in $path -split '\.') {
+                # handle zero or more [index] segments after an optional base
+                if ($seg -match '^(.*?)((\[\d+\])+)$') {
+                    $base = $Matches[1]
+                    $tail = $Matches[2]
+                    if ($base) { $cur = $cur[$base] }
+                    foreach ($m in ([regex]::Matches($tail, '\[(\d+)\]'))) {
+                        $cur = $cur[[int]$m.Groups[1].Value]
+                    }
+                }
+                else {
+                    $cur = $cur[$seg]
+                }
+            }
+            return $cur
+        }
+
+        ####################  PATCH COMPARISON  #######################
         function Compare-AfterPatch($exp,$act,$patchMap,$path='') {
             if (($exp -is [pscustomobject] -or $exp -is [hashtable]) -and
                 ($act -is [pscustomobject] -or $act -is [hashtable])) {
+
                 foreach ($k in ($exp.psobject.Properties.Name + $act.psobject.Properties.Name | Sort-Object -Unique)) {
                     $e=$exp.$k; $a=$act.$k
                     if ($k -eq '#whitespace') {
@@ -54,54 +92,58 @@ Describe "Golden Sample Full Coverage — $SourceFile" {
                     } else { Compare-AfterPatch $e $a $patchMap "$path.$k" }
                 }; return
             }
+
             if ($exp -is [System.Collections.IEnumerable] -and $exp -isnot [string] -and
                 $act -is [System.Collections.IEnumerable] -and $act -isnot [string]) {
                 if ($exp.Count -ne $act.Count) { throw "array len Δ $path" }
                 for ($i=0;$i -lt $exp.Count;$i++){Compare-AfterPatch $exp[$i] $act[$i] $patchMap "$path[$i]"}
                 return
             }
+
             $exp = Join-IfArray($exp); $act = Join-IfArray($act)
-            $pathClean = $path.TrimStart('.')
-            if ($patchMap.ContainsKey($pathClean)) {
-                if ($act -ne $patchMap[$pathClean]) { throw "patch fail $pathClean" }
-            } elseif ($exp -ne $act) { throw "unpatched field Δ $pathClean" }
+            $clean = $path.TrimStart('.')
+            if ($patchMap.ContainsKey($clean)) {
+                if ($act -ne $patchMap[$clean]) { throw "patch fail $clean" }
+            } elseif ($exp -ne $act) { throw "unpatched field Δ $clean" }
         }
 
-        ######################## MAIN LOGIC ########################
-        $jsonOrig    = [IO.Path]::GetTempFileName()
-        $patchedVipb = [IO.Path]::GetTempPath() + ([guid]::NewGuid()).Guid + ".vipb"
-        $jsonPatched = [IO.Path]::GetTempFileName()
-        $patchYaml   = [IO.Path]::GetTempFileName()
+        ###############################################################
+        #         Generate patch, apply, and validate round‑trip       #
+        ###############################################################
+        $jsonOrig     = [IO.Path]::GetTempFileName()
+        $patchedVipb  = [IO.Path]::GetTempPath() + ([guid]::NewGuid()).Guid + ".vipb"
+        $jsonPatched  = [IO.Path]::GetTempFileName()
+        $patchYaml    = [IO.Path]::GetTempFileName()
 
         try {
             & ./publish/linux-x64/VipbJsonTool vipb2json $SourceFile $jsonOrig
             $orig = Get-Content $jsonOrig -Raw | ConvertFrom-Json
 
-            $allPaths   = Get-LeafPaths $orig
-            $patchMap   = @{}
+            $allPaths = Get-LeafPaths $orig
+            $patchMap = @{}
 
             foreach ($p in $allPaths) {
-                # Skip read‑only or problematic fields
+                # Skip read‑only or tricky fields
                 if ($p -like '*#whitespace*') { continue }
                 if ($p -match '^@')           { continue }
 
-                $origVal = Join-IfArray((Invoke-Expression "`$orig.$($p -replace '\.','.`')"))
-                if ($origVal -is [bool])         { $patchMap[$p] = -not $origVal }
-                elseif ($origVal -is [int64] -or $origVal -is [double]) { $patchMap[$p] = [double]$origVal + 1 }
-                else                              { $patchMap[$p] = '__PATCHED__' }
+                $origVal = Join-IfArray((Get-ByPath $orig $p))
+                if ($origVal -is [bool]) { $patchMap[$p] = -not $origVal }
+                elseif ($origVal -is [double] -or $origVal -is [int64]) { $patchMap[$p] = [double]$origVal + 1 }
+                else { $patchMap[$p] = '__PATCHED__' }
             }
 
-            # Emit YAML
+            # --- emit YAML file ---
             $yaml = @("schema_version: 1","patch:")
             foreach ($k in $patchMap.Keys) {
                 $v = $patchMap[$k]
-                if ($v -is [bool])   { $yaml += "  ${k}: $($v.ToString().ToLower())" }
-                elseif ($v -is [string]) { $yaml += "  ${k}: '$($v -replace '''','''''')'" }
-                else                 { $yaml += "  ${k}: $v" }
+                if ($v -is [bool])        { $yaml += "  ${k}: $($v.ToString().ToLower())" }
+                elseif ($v -is [string])  { $yaml += "  ${k}: '$($v -replace '''','''''')'" }
+                else                     { $yaml += "  ${k}: $v" }
             }
             Set-Content $patchYaml $yaml -Encoding utf8
 
-            # Patch & re‑round‑trip
+            # --- patch + re‑round‑trip ---
             & ./publish/linux-x64/VipbJsonTool patch2vipb $jsonOrig $patchedVipb $patchYaml
             & ./publish/linux-x64/VipbJsonTool vipb2json   $patchedVipb $jsonPatched
             $patched = Get-Content $jsonPatched -Raw | ConvertFrom-Json
