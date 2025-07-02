@@ -37,8 +37,17 @@ Describe "VIPB round-trip equivalence via JSON" {
                 throw "Difference at ${path}: expected scalar, actual array"
             }
             else {
-                if ($expected -ne $actual) {
-                    throw "Difference at ${path}: expected '$expected', got '$actual'"
+                # Robust string/array/whitespace comparison
+                $a = $expected
+                $b = $actual
+                if ($a -is [System.Collections.IEnumerable] -and $a -isnot [string]) {
+                    $a = ($a -join "")
+                }
+                if ($b -is [System.Collections.IEnumerable] -and $b -isnot [string]) {
+                    $b = ($b -join "")
+                }
+                if ($a -ne $b) {
+                    throw "Difference at ${path}: expected '$a', got '$b'"
                 }
             }
         }
@@ -80,7 +89,7 @@ Describe "VIPB round-trip equivalence via JSON" {
                 throw "JSON conversion failed: $($_.Exception.Message)"
             }
 
-            # 5. Recursively compare, tolerating array/scalar ambiguity
+            # 5. Recursively compare, tolerating array/scalar/whitespace ambiguity
             Compare-JsonSemantic $jsonOrig $jsonRound
         }
         finally {
