@@ -1,4 +1,4 @@
-param([Parameter(Mandatory = $true)][string]$SourceFile)
+param([string]$SourceFile = "tests/Samples/seed.vipb")
 
 Describe "Golden Sample Full Coverage — $SourceFile" {
 
@@ -77,7 +77,7 @@ Describe "Golden Sample Full Coverage — $SourceFile" {
             foreach ($k in $patchMap.Keys) {
                 $v=$patchMap[$k]
                 if ($v -is [bool])   { $yaml += "  ${k}: $($v.ToString().ToLower())" }
-                elseif ($v -is[string]) { $yaml += "  ${k}: '$($v -replace '''','''''')'" }
+                elseif ($v -is [string]) { $yaml += "  ${k}: '$($v -replace '''','''''')'" }
                 else                 { $yaml += "  ${k}: $v" }
             }
             Set-Content $patchYaml $yaml -Encoding utf8

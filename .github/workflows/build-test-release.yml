@@ -3,7 +3,9 @@ name: build-test-release
 on:
   push:
     branches: [ main ]
-    tags: [ 'v*' ]
+    tags:  [ 'v*' ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build-test:
@@ -57,13 +59,13 @@ jobs:
 
       # --- Run tests (BASIC & GOLDEN SAMPLE) -----------------------------------
       - name: Run Pester tests (Basic and Full Golden Sample Coverage)
-        if: github.ref == 'refs/heads/main'
         run: |
           $failures = $false
+
           $resultBasic = Invoke-Pester -Configuration @{
             Run = @{
-              Path = 'tests/RoundTrip.Tests.ps1'
-              PassThru = $true
+              Path      = 'tests/RoundTrip.Tests.ps1'
+              PassThru  = $true
             }
             TestResult = @{
               Enabled      = $true
@@ -76,7 +78,8 @@ jobs:
           $resultGolden = Invoke-Pester -Configuration @{
             Run = @{
               Path       = 'tests/RoundTrip.GoldenSample.Tests.ps1'
-              Parameters = @{ SourceFile = "tests/Samples/seed.vipb" }
+              # SourceFile parameter will default to tests/Samples/seed.vipb if not provided
+              # (Can override via -Parameters if needed, but default is used here)
               PassThru   = $true
             }
             TestResult = @{
@@ -90,7 +93,7 @@ jobs:
           if ($failures) { exit 1 }
 
       - name: Upload Test Results
-        if: always() && github.ref == 'refs/heads/main'
+        if: always()    # always upload, even on failure or PR, for debugging
         uses: actions/upload-artifact@v4
         with:
           name: pester-test-results
@@ -98,11 +101,11 @@ jobs:
             basic-test-results.xml
             golden-sample-results.xml
 
-      # --- Docker image (main branch and tags only) ----------------------------
+      # --- Docker image build (for main branch and tags) -----------------------
       - name: Build Docker image
         run: docker build -t ghcr.io/labview-community-ci-cd/seed:${{ github.sha }} .
 
-      - name: Docker login, tag & push (main & tags only)
+      - name: Docker login, tag & push
         if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
         uses: docker/login-action@v3
         with:
@@ -123,7 +126,7 @@ jobs:
           docker push ghcr.io/labview-community-ci-cd/seed:latest
           docker push ghcr.io/labview-community-ci-cd/seed:${{ github.ref_name }}
 
-      # --- artifact upload -----------------------------------------------------
+      # --- artifact upload (CLI binary) ----------------------------------------
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
         with:
