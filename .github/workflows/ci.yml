@@ -55,12 +55,28 @@ jobs:
       - name: Install Pester
         run: Install-Module Pester -Force -Scope CurrentUser
 
+      # --- Run tests (BASIC & GOLDEN SAMPLE) -----------------------------------
       - name: Run Pester tests (Basic and Full Golden Sample Coverage)
         run: |
-          Invoke-Pester tests/RoundTrip.Tests.ps1 -CI -OutputFile basic-test-results.xml -OutputFormat NUnitXml
-          Invoke-Pester tests/RoundTrip.GoldenSample.Tests.ps1 -CI -Script @{
-            Parameters = @{ SourceFile = "tests/Samples/seed.vipb" }
-          } -OutputFile golden-sample-results.xml -OutputFormat NUnitXml
+          Invoke-Pester -CI -Script tests/RoundTrip.Tests.ps1 -Configuration @{
+            Run = @{
+              Output = @{
+                Path = 'basic-test-results.xml'
+                Format = 'NUnitXml'
+              }
+            }
+          }
+          Invoke-Pester -CI -Script @{
+            Path = 'tests/RoundTrip.GoldenSample.Tests.ps1'
+            Parameters = @{ SourceFile = "tests/Samples/NI Icon editor.vipb" }
+          } -Configuration @{
+            Run = @{
+              Output = @{
+                Path = 'golden-sample-results.xml'
+                Format = 'NUnitXml'
+              }
+            }
+          }
 
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
@@ -95,7 +111,7 @@ jobs:
           docker push ghcr.io/labview-community-ci-cd/seed:latest
           docker push ghcr.io/labview-community-ci-cd/seed:${{ github.ref_name }}
 
-      # --- artifact upload ------------------------------------------------------
+      # --- artifact upload -----------------------------------------------------
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
         with:
