@@ -55,16 +55,18 @@ Describe "Golden Sample Full Coverage — $SourceFile" {
             return $out
         }
 
-        ###############  SAFE JSON PATH VALUE LOOK‑UP  ################
+        ###############  NULL‑SAFE JSON PATH LOOK‑UP  #################
         function Get-ByPath($obj, [string]$path) {
             $cur = $obj
             foreach ($seg in $path -split '\.') {
+                if ($null -eq $cur) { return $null }
                 # handle zero or more [index] segments after an optional base
                 if ($seg -match '^(.*?)((\[\d+\])+)$') {
                     $base = $Matches[1]
                     $tail = $Matches[2]
                     if ($base) { $cur = $cur[$base] }
                     foreach ($m in ([regex]::Matches($tail, '\[(\d+)\]'))) {
+                        if ($null -eq $cur) { return $null }
                         $cur = $cur[[int]$m.Groups[1].Value]
                     }
                 }
@@ -123,11 +125,12 @@ Describe "Golden Sample Full Coverage — $SourceFile" {
             $patchMap = @{}
 
             foreach ($p in $allPaths) {
-                # Skip read‑only or tricky fields
                 if ($p -like '*#whitespace*') { continue }
                 if ($p -match '^@')           { continue }
 
                 $origVal = Join-IfArray((Get-ByPath $orig $p))
+                if ($null -eq $origVal) { continue }
+
                 if ($origVal -is [bool]) { $patchMap[$p] = -not $origVal }
                 elseif ($origVal -is [double] -or $origVal -is [int64]) { $patchMap[$p] = [double]$origVal + 1 }
                 else { $patchMap[$p] = '__PATCHED__' }
