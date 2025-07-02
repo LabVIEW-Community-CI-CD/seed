@@ -76,7 +76,7 @@ jobs:
           $resultGolden = Invoke-Pester -Configuration @{
             Run = @{
               Path       = 'tests/RoundTrip.GoldenSample.Tests.ps1'
-              Parameters = @{ SourceFile = "tests/Samples/NI Icon editor.vipb" }
+              Parameters = @{ SourceFile = "tests/Samples/seed.vipb" }
               PassThru   = $true
             }
             TestResult = @{
