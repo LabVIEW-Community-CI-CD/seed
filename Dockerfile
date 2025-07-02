@@ -1,22 +1,51 @@
-# Use the official .NET runtime dependencies image as base (no build stage needed)
-FROM mcr.microsoft.com/dotnet/runtime-deps:8.0
+FROM ubuntu:20.04
 
-# Install any additional system dependencies required by the tool
-RUN apt-get update && apt-get install -y --no-install-recommends git curl && rm -rf /var/lib/apt/lists/*
+# Install dependencies
+RUN apt-get update && \
+    apt-get install -y git curl unzip && \
+    rm -rf /var/lib/apt/lists/*
 
-# Set working directory
-WORKDIR /workspace
+# Set working directory to GitHub Actions workspace
+WORKDIR /github/workspace
 
-# Copy the pre-built VipbJsonTool binary from the build context into the image
-# (The binary is built by the CI pipeline and placed in publish/linux-x64/)
-COPY publish/linux-x64/VipbJsonTool /usr/local/bin/VipbJsonTool
+# Copy entrypoint and action files
+COPY entrypoint.sh /entrypoint.sh
+COPY action.yml /action.yml
 
-# Copy entrypoint script and the VIPB alias map into the image
-COPY scripts/entrypoint.sh /entrypoint.sh
-COPY .vipb-alias-map.yml /workspace/vipb-alias-map.yml
+# Copy golden sample templates for seeding
+COPY tests/Samples/seed.lvproj /github/workspace/tests/Samples/seed.lvproj
+COPY tests/Samples/seed.vipb  /github/workspace/tests/Samples/seed.vipb
 
-# Ensure the entrypoint script is executable
-RUN chmod +x /entrypoint.sh
+# Copy conversion CLI binaries or scripts into /usr/local/bin
+COPY bin/vipb2json /usr/local/bin/vipb2json
+COPY bin/json2vipb /usr/local/bin/json2vipb
 
-# Set the container entrypoint
+# Ensure executables have the correct permissions
+RUN chmod +x /entrypoint.sh /usr/local/bin/vipb2json /usr/local/bin/json2vipb
+
+ENTRYPOINT ["/entrypoint.sh"]
+```dockerfile
+FROM ubuntu:20.04
+
+# Install dependencies
+RUN apt-get update && \
+    apt-get install -y git curl unzip && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /github/workspace
+
+# Copy entrypoint and action files
+COPY entrypoint.sh /entrypoint.sh
+
+# Copy golden sample templates for seeding
+COPY tests/Samples/seed.lvproj /github/workspace/tests/Samples/seed.lvproj
+COPY tests/Samples/seed.vipb /github/workspace/tests/Samples/seed.vipb
+
+# Copy CLI binary or scripts
+COPY bin/vipb2json /usr/local/bin/vipb2json
+COPY bin/json2vipb /usr/local/bin/json2vipb
+
+# Ensure executables have the correct permissions
+RUN chmod +x /entrypoint.sh /usr/local/bin/vipb2json /usr/local/bin/json2vipb
+
 ENTRYPOINT ["/entrypoint.sh"]

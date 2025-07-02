@@ -1,137 +1,75 @@
-# json‑vipb GitHub Action
+# LabVIEW CI/CD Seed GitHub Action
 
+This GitHub Action automates conversion, patching, and seeding processes for LabVIEW project (`.lvproj`) and VI Package Build specification (`.vipb`) files, streamlining the CI/CD pipeline for LabVIEW applications.
 
+## Detailed Usage Overview
 
-**Convert LabVIEW VI Package Build Spec (**``**) files to and from JSON, apply YAML patches, and integrate effortlessly into GitHub Actions workflows.**
+The action supports the following primary functionalities:
 
----
+1. **Conversion**: Convert between `.vipb` (VI Package Build) and JSON formats, facilitating easy tracking, version control, and automation of package specifications.
+2. **Patching**: Apply modifications to existing `.vipb` or JSON files via simple patch files or YAML-defined patches.
+3. **Seeding**: Automatically create initial `.lvproj` and `.vipb` files from predefined templates if they don't exist, essential for initializing projects quickly and consistently.
 
-## Overview
+## Inputs Reference
 
-This action simplifies LabVIEW package build automation, allowing users to:
+| Name           | Required | Default | Description                                                                                                          |
+| -------------- | -------- | ------- | -------------------------------------------------------------------------------------------------------------------- |
+| `mode`         | yes      |         | Conversion mode: specify either `vipb2json` (VI Package Build to JSON) or `json2vipb` (JSON to VI Package Build).    |
+| `input`        | yes      |         | Path to the input file (the file being converted or patched).                                                        |
+| `output`       | yes      |         | Path to the output file (where the result will be saved).                                                            |
+| `patch_file`   | no       |         | Path to a simple file containing patch operations (typically diff/patch files).                                      |
+| `patch_yaml`   | no       |         | Path to a YAML-formatted file specifying structured patch operations. Requires `yq` tool installed.                  |
+| `always_patch` | no       | false   | Force patching even if targeted fields are absent, allowing more aggressive file modification.                       |
+| `branch_name`  | no       |         | Specify a branch name explicitly for committing or pull request operations.                                          |
+| `auto_pr`      | no       | false   | When enabled (`true`), automatically opens a pull request after committing changes. Requires GitHub CLI (`gh`).      |
+| `upload_files` | no       | true    | If enabled (`true`), uploads the generated or patched files as artifacts to the workflow run.                        |
+| `seed_lvproj`  | no       | false   | Automatically seeds a LabVIEW project file (`.lvproj`) using the template in `tests/Samples/seed.lvproj` if missing. |
+| `seed_vipb`    | no       | false   | Automatically seeds a VI Package build spec file (`.vipb`) from `tests/Samples/seed.vipb` if missing.                |
+| `tag`          | no¹      |         | Git tag name for identifying the specific release or state. Required when using `seed_lvproj` or `seed_vipb`.        |
 
-- Convert `.vipb` files into JSON format for inspection or modification.
-- Reconstruct `.vipb` files from modified JSON.
-- Programmatically update `.vipb` content via structured YAML patches.
-- Validate changes and automate LabVIEW build configurations in CI/CD pipelines.
+> ¹ **Important**: The `tag` parameter becomes mandatory whenever either `seed_lvproj` or `seed_vipb` is set to `true`.
 
----
+## Comprehensive Seeding Example
 
-## Use Cases
-
-### 1. Automated Code Reviews
-
-Convert `.vipb` files to JSON to facilitate automated or AI-driven reviews and identify structural or content differences clearly.
-
-### 2. CI/CD Automation
-
-Integrate this action within GitHub workflows to automatically verify and apply configuration changes to LabVIEW builds.
-
-### 3. Change Tracking
-
-Efficiently track and document changes in LabVIEW build specifications by converting them to JSON and maintaining them within version control systems.
-
-### 4. Bulk Field Updates
-
-Apply consistent updates across multiple `.vipb` files using YAML patches, significantly reducing manual effort and potential human error.
-
-### 5. Enhanced AI Integration
-
-Enable AI assistants to automate review, validation, and modification tasks, leveraging structured JSON representations and well-defined YAML patches.
-
----
-
-## Quick Start
+Below is a complete example illustrating how to leverage the seeding capability within your GitHub Actions workflow:
 
 ```yaml
-name: Convert VIPB
-
+name: Seed LabVIEW Project and VIPB
 on:
   push:
-    paths: [ '**/*.vipb' ]
+    tags:
+      - 'v*'
 
 jobs:
-  convert:
+  seed-files:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: VIPB to JSON
-        uses: LabVIEW-Community-CI-CD/seed@v1.4.0
+      - name: Seed LabVIEW Project and Build Specification
+        uses: LabVIEW-Community-CI-CD/seed@v2.0.0
         with:
-          input:  './build/MyPackage.vipb'
-          output: './build/MyPackage.json'
-          direction: 'to-json'
+          mode: vipb2json               # Dummy mode for compatibility; not utilized in seeding mode.
+          input: dummy.vipb             # Placeholder; not utilized during seeding.
+          output: dummy.json            # Placeholder; not utilized during seeding.
+          seed_lvproj: true             # Enables automatic seeding of the .lvproj file.
+          seed_vipb: true               # Enables automatic seeding of the .vipb file.
+          tag: ${{ github.ref_name }}   # Automatically use the tag name from the triggering event.
 ```
 
-### Inputs
+This workflow step will:
 
-| Name        | Required | Default   | Description                                    |
-| ----------- | -------- | --------- | ---------------------------------------------- |
-| `input`     | **yes**  | —         | Path to source `.vipb` or `.json` file.        |
-| `output`    | **yes**  | —         | Path for the output file.                      |
-| `direction` | no       | `to-json` | Conversion direction (`to-json` or `to-vipb`). |
+* Automatically check for the existence of the LabVIEW project file (`seed.lvproj`) at the repository root. If absent, it creates the file based on a predefined golden template.
+* Check for the existence of the VI Package build specification (`build/buildspec.vipb`). If missing, it seeds the file from a predefined golden template.
+* Commit these newly created files directly to a dedicated branch named `seed-<tag>`, clearly indicating their association with the specific release or tag. This operation does not automatically open a pull request, giving you full control over subsequent integration steps.
 
----
+## AI-Guidance Considerations
 
-## Continuous Integration (CI)
+When leveraging this documentation with AI assistance:
 
-### Workflow Steps
+* Explicitly specify each parameter based on your project's needs. Provide clear context around your project's structure, repository standards, and CI/CD strategies.
+* Use provided examples as templates, clearly marking placeholders (`dummy.vipb`, `dummy.json`) as irrelevant for seeding operations.
+* Highlight the dependency requirements (like `yq` and `gh`) clearly to avoid runtime issues.
+* Clearly document and describe intended behavior for branching, tagging, and artifact uploading to align AI-generated recommendations closely with your workflow requirements.
 
-- **Build CLI**: Compile a standalone CLI binary.
-- **Test Suites**:
-  - **Basic Round-trip**: Ensures fidelity of `.vipb` ↔ JSON conversions.
-  - **Golden Sample Test**: Verifies YAML patch correctness across all patchable fields.
-  - **Fallback Handling**: Performs no-op validation if no fields are patchable (whitespace changes ignored).
-- **Publish Artifacts**: Docker images and test results.
-
-### Triggers
-
-- Every push to `main` or new tag (`v*`)
-- Every pull request targeting `main`
-
----
-
-## Local Testing
-
-Ensure tests pass locally before committing changes:
-
-```powershell
-dotnet publish src/VipbJsonTool -c Release -r linux-x64 --self-contained `
-    -p:PublishSingleFile=true -o publish/linux-x64
-
-Install-Module Pester -Scope CurrentUser
-Invoke-Pester
-```
-
----
-
-## Troubleshooting & FAQ
-
-| Issue                           | Reason                              | Solution                                                          |
-| ------------------------------- | ----------------------------------- | ----------------------------------------------------------------- |
-| `object reference not set`      | YAML patch has no applicable fields | Update script to latest version (auto fallback implemented).      |
-| `unpatched #whitespace changed` | Whitespace formatting differences   | Latest test script ignores whitespace changes in no-op scenarios. |
-| `unpatched field Δ`             | Unexpected JSON changes             | Add changes explicitly to YAML patches.                           |
-
----
-
-## Versioning & Security
-
-- Use explicit tags (`v1.4.0`) or commit SHAs for secure and reproducible builds.
-- Docker images available at: `ghcr.io/labview-community-ci-cd/seed:<tag>`
-
----
-
-## Contributing
-
-1. Fork the repository.
-2. Run tests locally (`Invoke-Pester`).
-3. Submit a pull request.
-
----
-
-## License
-
-MIT © 2025 LabVIEW Community CI/CD
-
+Following these guidelines ensures that AI assistance effectively guides you through implementing and maintaining LabVIEW projects within a robust and automated CI/CD pipeline.
