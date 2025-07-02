@@ -57,28 +57,40 @@ jobs:
 
       # --- Run tests (BASIC & GOLDEN SAMPLE) -----------------------------------
       - name: Run Pester tests (Basic and Full Golden Sample Coverage)
+        if: github.ref == 'refs/heads/main'
         run: |
-          Invoke-Pester -CI -Script tests/RoundTrip.Tests.ps1 -Configuration @{
+          $failures = $false
+          $resultBasic = Invoke-Pester -Configuration @{
             Run = @{
-              Output = @{
-                Path = 'basic-test-results.xml'
-                Format = 'NUnitXml'
-              }
+              Path = 'tests/RoundTrip.Tests.ps1'
+              PassThru = $true
+            }
+            TestResult = @{
+              Enabled      = $true
+              OutputFormat = 'NUnitXml'
+              OutputPath   = 'basic-test-results.xml'
             }
           }
-          Invoke-Pester -CI -Script @{
-            Path = 'tests/RoundTrip.GoldenSample.Tests.ps1'
-            Parameters = @{ SourceFile = "tests/Samples/NI Icon editor.vipb" }
-          } -Configuration @{
+          if ($resultBasic.FailedCount -gt 0) { $failures = $true }
+
+          $resultGolden = Invoke-Pester -Configuration @{
             Run = @{
-              Output = @{
-                Path = 'golden-sample-results.xml'
-                Format = 'NUnitXml'
-              }
+              Path       = 'tests/RoundTrip.GoldenSample.Tests.ps1'
+              Parameters = @{ SourceFile = "tests/Samples/NI Icon editor.vipb" }
+              PassThru   = $true
+            }
+            TestResult = @{
+              Enabled      = $true
+              OutputFormat = 'NUnitXml'
+              OutputPath   = 'golden-sample-results.xml'
             }
           }
+          if ($resultGolden.FailedCount -gt 0) { $failures = $true }
+
+          if ($failures) { exit 1 }
 
       - name: Upload Test Results
+        if: always() && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: pester-test-results
