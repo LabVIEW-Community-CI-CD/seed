@@ -1,69 +1,94 @@
-
 using System;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using System.IO;
+using System.Linq;
+using System.Text;
+using System.Xml;
+using Newtonsoft.Json;
 
-namespace VipbJsonTool {
-    class Program {
-        static int Main(string[] args) {
-            if (args.Length < 2) {
-                Console.Error.WriteLine("Usage: VipbJsonTool <mode> <inFile> [outFile] [patchFile] [alwaysPatch] [branchName] [autoPr]");
+namespace VipbJsonTool
+{
+    internal static class Program
+    {
+        private static int Main(string[] args)
+        {
+            if (args.Length < 3)
+            {
+                Console.Error.WriteLine("Usage:");
+                Console.Error.WriteLine("  VipbJsonTool vipb2json <in.vipb> <out.json>");
+                Console.Error.WriteLine("  VipbJsonTool json2vipb <in.json> <out.vipb>");
+                Console.Error.WriteLine("  VipbJsonTool patch2vipb <in.json> <out.vipb> <patch.yml>");
                 return 1;
             }
-            var mode = args[0];
-            var inFile = args[1];
-            var outFile = args.Length > 2 ? args[2] : string.Empty;
-            var patchFile = args.Length > 3 ? args[3] : string.Empty;
-            var alwaysPatchFile = args.Length > 4 ? args[4] : string.Empty;
-            var branchName = args.Length > 5 ? args[5] : string.Empty;
-            var autoPrStr = args.Length > 6 ? args[6] : "false";
-            var autoPr = autoPrStr.Equals("true", StringComparison.OrdinalIgnoreCase);
 
-            try {
-                if (mode == "vipb2json") {
-                    var xml = File.ReadAllText(inFile);
-                    var doc = new System.Xml.XmlDocument();
-                    doc.PreserveWhitespace = true;
-                    doc.LoadXml(xml);
-                    var json = JsonConvert.SerializeXmlNode(doc, Formatting.Indented, true);
-                    File.WriteAllText(outFile, json);
-                } else if (mode == "json2vipb") {
-                    var json = File.ReadAllText(inFile);
-                    var xml = JsonToXmlConverter.Convert(json);
-                    File.WriteAllText(outFile, xml);
-                } else if (mode == "patch2vipb") {
-                    var json = File.ReadAllText(inFile);
-                    var jObj = JObject.Parse(json);
+            var mode    = args[0].ToLowerInvariant();
+            var inFile  = args[1];
+            var outFile = args[2];
 
-                    // load patch map
-                    if (!string.IsNullOrEmpty(patchFile) && File.Exists(patchFile)) {
-                        var patchYaml = File.ReadAllText(patchFile);
-                        PatchApplier.ApplyYamlPatch(jObj, patchYaml);
-                    }
-                    if (!string.IsNullOrEmpty(alwaysPatchFile) && File.Exists(alwaysPatchFile)) {
-                        var alwaysYaml = File.ReadAllText(alwaysPatchFile);
-                        PatchApplier.ApplyYamlPatch(jObj, alwaysYaml);
+            try
+            {
+                switch (mode)
+                {
+                    // ----------------------------------------------------
+                    // VIPB → JSON
+                    // ----------------------------------------------------
+                    case "vipb2json":
+                    {
+                        var doc = new XmlDocument { PreserveWhitespace = true };
+                        doc.Load(inFile);
+
+                        // Convert to JSON via helper that strips XML prolog
+                        var json = JsonToXmlConverter.XmlToJson(doc, omitRootObject: true);
+
+                        File.WriteAllText(outFile, json, Encoding.UTF8);
+                        break;
                     }
 
-                    var patchedJson = jObj.ToString(Formatting.Indented);
-                    File.WriteAllText(inFile, patchedJson); // overwrite source for transparency
-                    var xml = JsonToXmlConverter.Convert(patchedJson);
-                    File.WriteAllText(outFile, xml);
-                } else {
-                    Console.Error.WriteLine($"Unknown mode: {mode}");
-                    return 2;
-                }
+                    // ----------------------------------------------------
+                    // JSON → VIPB
+                    // ----------------------------------------------------
+                    case "json2vipb":
+                    {
+                        var json = File.ReadAllText(inFile, Encoding.UTF8);
+                        var xml  = JsonConvert.DeserializeXmlNode(json, "Package", true);
+                        xml.Save(outFile);
+                        break;
+                    }
 
-                if (!string.IsNullOrEmpty(branchName)) {
-                    // Do not commit patch YAML files (always generated dynamically)
-                    GitHelper.CommitAndPush(branchName, new[] { inFile, outFile }, autoPr);
+                    // ----------------------------------------------------
+                    // JSON → VIPB with patch
+                    // ----------------------------------------------------
+                    case "patch2vipb":
+                    {
+                        if (args.Length < 4)
+                        {
+                            Console.Error.WriteLine("patch2vipb mode requires a patch YAML file.");
+                            return 1;
+                        }
+                        var patchFile = args[3];
+
+                        var json = File.ReadAllText(inFile, Encoding.UTF8);
+                        var root = Newtonsoft.Json.Linq.JObject.Parse(json);
+
+                        var patchYaml = File.ReadAllText(patchFile, Encoding.UTF8);
+                        PatchApplier.ApplyYamlPatch(root, patchYaml);
+
+                        var patchedDoc = JsonConvert.DeserializeXmlNode(root.ToString(), "Package", true);
+                        patchedDoc.Save(outFile);
+                        break;
+                    }
+
+                    default:
+                        Console.Error.WriteLine($"Unknown mode: {mode}");
+                        return 1;
                 }
 
                 return 0;
-            } catch (Exception ex) {
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"ERROR: {ex.Message}");
                 Console.Error.WriteLine(ex);
-                return 99;
+                return 1;
             }
         }
     }
