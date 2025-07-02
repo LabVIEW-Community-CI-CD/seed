@@ -5,6 +5,19 @@ Describe "VIPB round-trip equivalence via JSON" {
     It "serializes to JSON and back to VIPB with no data loss" {
 
         function Compare-JsonSemantic($expected, $actual, $path = "") {
+            # Special-case root #whitespace
+            if ($path -eq "" -and $expected.ContainsKey("#whitespace") -and $actual.ContainsKey("#whitespace")) {
+                $a = $expected["#whitespace"]
+                $b = $actual["#whitespace"]
+                if ($a -is [System.Collections.IEnumerable] -and $a -isnot [string]) { $a = ($a -join "") }
+                if ($b -is [System.Collections.IEnumerable] -and $b -isnot [string]) { $b = ($b -join "") }
+                if ($a -ne $b) {
+                    throw "Difference at ${path}.#whitespace: expected '$a', got '$b'"
+                }
+                $expected.Remove("#whitespace")
+                $actual.Remove("#whitespace")
+            }
+
             if ($null -eq $expected -and $null -eq $actual) { return }
             elseif ($null -eq $expected -or $null -eq $actual) {
                 throw "Difference at ${path}: one side is null, the other is not"
@@ -40,12 +53,8 @@ Describe "VIPB round-trip equivalence via JSON" {
                 # Robust string/array/whitespace comparison
                 $a = $expected
                 $b = $actual
-                if ($a -is [System.Collections.IEnumerable] -and $a -isnot [string]) {
-                    $a = ($a -join "")
-                }
-                if ($b -is [System.Collections.IEnumerable] -and $b -isnot [string]) {
-                    $b = ($b -join "")
-                }
+                if ($a -is [System.Collections.IEnumerable] -and $a -isnot [string]) { $a = ($a -join "") }
+                if ($b -is [System.Collections.IEnumerable] -and $b -isnot [string]) { $b = ($b -join "") }
                 if ($a -ne $b) {
                     throw "Difference at ${path}: expected '$a', got '$b'"
                 }
