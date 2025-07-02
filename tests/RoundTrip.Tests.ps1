@@ -5,38 +5,38 @@ Describe "VIPB round-trip equivalence via JSON" {
     It "serializes to JSON and back to VIPB with no data loss" {
 
         function Compare-JsonSemantic($expected, $actual, $path = "") {
-            # Special-case root #whitespace
+            # Universal handling of #whitespace anywhere in the JSON
             if (
-                $path -eq "" -and
-                $expected.PSObject.Properties.Name -contains '#whitespace' -and
-                $actual.PSObject.Properties.Name -contains '#whitespace'
+                ($expected -is [System.Management.Automation.PSCustomObject] -or $expected -is [System.Collections.IDictionary]) -and
+                ($actual -is [System.Management.Automation.PSCustomObject] -or $actual -is [System.Collections.IDictionary])
             ) {
-                $a = $expected.'#whitespace'
-                $b = $actual.'#whitespace'
-                if ($a -is [System.Collections.IEnumerable] -and $a -isnot [string]) { $a = ($a -join "") }
-                if ($b -is [System.Collections.IEnumerable] -and $b -isnot [string]) { $b = ($b -join "") }
-                if ($a -ne $b) {
-                    throw "Difference at ${path}.#whitespace: expected '$a', got '$b'"
-                }
-                $expected.PSObject.Properties.Remove('#whitespace')
-                $actual.PSObject.Properties.Remove('#whitespace')
-            }
+                if ($expected -is [System.Management.Automation.PSCustomObject]) { $expKeys = $expected.PSObject.Properties.Name }
+                else { $expKeys = $expected.Keys }
+                if ($actual -is [System.Management.Automation.PSCustomObject]) { $actKeys = $actual.PSObject.Properties.Name }
+                else { $actKeys = $actual.Keys }
+                $allKeys = $expKeys + $actKeys | Sort-Object -Unique
 
+                foreach ($k in $allKeys) {
+                    if ($k -eq "#whitespace") {
+                        $a = ($expected -is [System.Management.Automation.PSCustomObject]) ? $expected.'#whitespace' : $expected["#whitespace"]
+                        $b = ($actual   -is [System.Management.Automation.PSCustomObject]) ? $actual.'#whitespace'   : $actual["#whitespace"]
+                        if ($a -is [System.Collections.IEnumerable] -and $a -isnot [string]) { $a = ($a -join "") }
+                        if ($b -is [System.Collections.IEnumerable] -and $b -isnot [string]) { $b = ($b -join "") }
+                        if ($a -ne $b) {
+                            throw "Difference at ${path}.#whitespace: expected '$a', got '$b'"
+                        }
+                        continue
+                    }
+                    # Standard recursive compare for all other keys
+                    if ($expected -is [System.Management.Automation.PSCustomObject]) { $e = $expected.$k } else { $e = $expected[$k] }
+                    if ($actual   -is [System.Management.Automation.PSCustomObject]) { $a = $actual.$k   } else { $a = $actual[$k] }
+                    Compare-JsonSemantic $e $a ("${path}.$k")
+                }
+                return
+            }
             if ($null -eq $expected -and $null -eq $actual) { return }
             elseif ($null -eq $expected -or $null -eq $actual) {
                 throw "Difference at ${path}: one side is null, the other is not"
-            }
-            elseif ($expected -is [System.Management.Automation.PSCustomObject] -and $actual -is [System.Management.Automation.PSCustomObject]) {
-                $allKeys = $expected.PSObject.Properties.Name + $actual.PSObject.Properties.Name | Sort-Object -Unique
-                foreach ($k in $allKeys) {
-                    Compare-JsonSemantic $expected.$k $actual.$k ("${path}.$k")
-                }
-            }
-            elseif ($expected -is [System.Collections.IDictionary] -and $actual -is [System.Collections.IDictionary]) {
-                $allKeys = $expected.Keys + $actual.Keys | Sort-Object -Unique
-                foreach ($k in $allKeys) {
-                    Compare-JsonSemantic $expected[$k] $actual[$k] ("${path}.$k")
-                }
             }
             elseif ($expected -is [System.Collections.IEnumerable] -and $expected -isnot [string] -and
                     $actual -is [System.Collections.IEnumerable] -and $actual -isnot [string]) {
@@ -60,7 +60,6 @@ Describe "VIPB round-trip equivalence via JSON" {
                 throw "Difference at ${path}: expected scalar, actual array"
             }
             else {
-                # Robust string/array/whitespace comparison
                 $a = $expected
                 $b = $actual
                 if ($a -is [System.Collections.IEnumerable] -and $a -isnot [string]) { $a = ($a -join "") }
