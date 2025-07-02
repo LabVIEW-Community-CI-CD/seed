@@ -1,22 +1,43 @@
-
 # json‑vipb GitHub Action
 
-[![CI](https://github.com/LabVIEW-Community-CI-CD/seed/actions/workflows/build-test-release.yml/badge.svg)](https://github.com/LabVIEW-Community-CI-CD/seed/actions/workflows/build-test-release.yml)
 
-Convert LabVIEW **VI Package Build Spec (.vipb)** files ↔ JSON, apply
-patches, and automate builds.
+
+**Convert LabVIEW VI Package Build Spec (**``**) files to and from JSON, apply YAML patches, and integrate effortlessly into GitHub Actions workflows.**
 
 ---
 
-## Features
+## Overview
 
-| Capability                 | Details                                                                                   |
-| -------------------------- | ----------------------------------------------------------------------------------------- |
-| **vipb ➞ json**            | Serialize .vipb to structured JSON for diffing/review                                     |
-| **json ➞ vipb**            | Create a .vipb file from edited JSON                                                      |
-| **YAML patching**          | Change fields programmatically via YAML patches                                           |
-| **Cross-platform action**  | Single-file .NET 8 CLI (Linux-x64) in Docker                                              |
-| **Robust CI**              | Validated by comprehensive Pester tests                                                   |
+This action simplifies LabVIEW package build automation, allowing users to:
+
+- Convert `.vipb` files into JSON format for inspection or modification.
+- Reconstruct `.vipb` files from modified JSON.
+- Programmatically update `.vipb` content via structured YAML patches.
+- Validate changes and automate LabVIEW build configurations in CI/CD pipelines.
+
+---
+
+## Use Cases
+
+### 1. Automated Code Reviews
+
+Convert `.vipb` files to JSON to facilitate automated or AI-driven reviews and identify structural or content differences clearly.
+
+### 2. CI/CD Automation
+
+Integrate this action within GitHub workflows to automatically verify and apply configuration changes to LabVIEW builds.
+
+### 3. Change Tracking
+
+Efficiently track and document changes in LabVIEW build specifications by converting them to JSON and maintaining them within version control systems.
+
+### 4. Bulk Field Updates
+
+Apply consistent updates across multiple `.vipb` files using YAML patches, significantly reducing manual effort and potential human error.
+
+### 5. Enhanced AI Integration
+
+Enable AI assistants to automate review, validation, and modification tasks, leveraging structured JSON representations and well-defined YAML patches.
 
 ---
 
@@ -45,31 +66,37 @@ jobs:
 
 ### Inputs
 
-| Name        | Required | Default   | Description                      |
-|-------------|:--------:|-----------|----------------------------------|
-| `input`     | **yes**  | —         | Source .vipb or .json file       |
-| `output`    | **yes**  | —         | Output file path                 |
-| `direction` | no       | `to-json` | Conversion direction             |
+| Name        | Required | Default   | Description                                    |
+| ----------- | -------- | --------- | ---------------------------------------------- |
+| `input`     | **yes**  | —         | Path to source `.vipb` or `.json` file.        |
+| `output`    | **yes**  | —         | Path for the output file.                      |
+| `direction` | no       | `to-json` | Conversion direction (`to-json` or `to-vipb`). |
 
 ---
 
 ## Continuous Integration (CI)
 
-Every push (main), pull_request, and tag triggers CI:
+### Workflow Steps
 
-- **Build** the CLI binary
-- **Test suites**:
-  - **Basic**: Verifies round-trip JSON ↔ vipb
-  - **Golden sample**: Verifies every patchable field via YAML patch
-  - No-op fallback if no fields patchable (whitespace ignored)
-- **Publish** Docker image (main/tags)
-- **Artifacts** always uploaded
+- **Build CLI**: Compile a standalone CLI binary.
+- **Test Suites**:
+  - **Basic Round-trip**: Ensures fidelity of `.vipb` ↔ JSON conversions.
+  - **Golden Sample Test**: Verifies YAML patch correctness across all patchable fields.
+  - **Fallback Handling**: Performs no-op validation if no fields are patchable (whitespace changes ignored).
+- **Publish Artifacts**: Docker images and test results.
+
+### Triggers
+
+- Every push to `main` or new tag (`v*`)
+- Every pull request targeting `main`
 
 ---
 
 ## Local Testing
 
-```pwsh
+Ensure tests pass locally before committing changes:
+
+```powershell
 dotnet publish src/VipbJsonTool -c Release -r linux-x64 --self-contained `
     -p:PublishSingleFile=true -o publish/linux-x64
 
@@ -81,27 +108,30 @@ Invoke-Pester
 
 ## Troubleshooting & FAQ
 
-| Issue                             | Reason                          | Solution                               |
-|-----------------------------------|---------------------------------|----------------------------------------|
-| `object reference not set`        | Empty YAML patch                | Latest script auto-fallback            |
-| `unpatched #whitespace changed`   | Whitespace differs on no-op run | Update test script (≥ v1.4.0)         |
-| `unpatched field Δ`               | Unexpected JSON edits           | Include changed field in YAML patch    |
+| Issue                           | Reason                              | Solution                                                          |
+| ------------------------------- | ----------------------------------- | ----------------------------------------------------------------- |
+| `object reference not set`      | YAML patch has no applicable fields | Update script to latest version (auto fallback implemented).      |
+| `unpatched #whitespace changed` | Whitespace formatting differences   | Latest test script ignores whitespace changes in no-op scenarios. |
+| `unpatched field Δ`             | Unexpected JSON changes             | Add changes explicitly to YAML patches.                           |
 
 ---
 
 ## Versioning & Security
 
-- Tag actions explicitly (`v1.4.0` or commit SHA).
-- Docker: `ghcr.io/labview-community-ci-cd/seed:<tag>`
+- Use explicit tags (`v1.4.0`) or commit SHAs for secure and reproducible builds.
+- Docker images available at: `ghcr.io/labview-community-ci-cd/seed:<tag>`
 
 ---
 
 ## Contributing
 
-Fork, test locally (`Invoke-Pester`), then PR.
+1. Fork the repository.
+2. Run tests locally (`Invoke-Pester`).
+3. Submit a pull request.
 
 ---
 
 ## License
 
-BSD0
+MIT © 2025 LabVIEW Community CI/CD
+
