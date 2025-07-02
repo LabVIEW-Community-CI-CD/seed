@@ -62,10 +62,11 @@ namespace VipbJsonTool
             if (doc.DocumentElement?.Name != rootElementName)
                 throw new InvalidOperationException($"Invalid root element. Expected '{rootElementName}'.");
 
-            // ------------------------------------------------------------------
-            // FIX ① — keep the outer element so the round‑trip starts with '{'
-            // ------------------------------------------------------------------
-            string json = JsonConvert.SerializeXmlNode(doc, Formatting.Indented, /* omitRootObject: */ false);
+            // Use fully-qualified enum to avoid ambiguity
+            string json = JsonConvert.SerializeXmlNode(
+                doc,
+                Newtonsoft.Json.Formatting.Indented,  // specify the JSON Formatting
+                /* omitRootObject: */ false);
             File.WriteAllText(jsonPath, json);
         }
 
@@ -80,9 +81,6 @@ namespace VipbJsonTool
 
             string json = File.ReadAllText(jsonPath);
 
-            // ------------------------------------------------------------------
-            // FIX ② — let Json.NET infer the root. We'll validate afterwards.
-            // ------------------------------------------------------------------
             var xmlDoc = JsonConvert.DeserializeXmlNode(json)!;
 
             if (xmlDoc.DocumentElement?.Name != rootElementName)
