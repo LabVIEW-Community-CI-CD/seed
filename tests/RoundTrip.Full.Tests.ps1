@@ -12,10 +12,10 @@ Describe "VIPB 100% field-coverage and alias enumeration" {
             $list = New-Object System.Collections.Generic.List[string]
             if($obj -is [pscustomobject]) {
                 foreach($n in $obj.PSObject.Properties.Name){
-                    $list.AddRange( Get-LeafPaths $obj.$n ($prefix ? "$prefix.$n" : $n) )
+                    $list.AddRange( Get-LeafPaths $obj.$n, ($prefix ? "$prefix.$n" : $n) )
                 }
             } elseif($obj -is [System.Collections.IEnumerable] -and $obj -isnot [string]) {
-                $i=0; foreach($v in $obj){$list.AddRange( Get-LeafPaths $v "$prefix[$i]");$i++}
+                $i=0; foreach($v in $obj){$list.AddRange( Get-LeafPaths $v, "$prefix[$i]");$i++}
             } else { if($prefix){$list.Add($prefix)} }
             return $list
         }
