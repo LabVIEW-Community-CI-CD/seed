@@ -2,46 +2,47 @@ param()
 
 Describe "VIPB round-trip equivalence via JSON" {
 
-    function Compare-JsonSemantic($expected, $actual, $path = "") {
-        if ($null -eq $expected -and $null -eq $actual) { return }
-        elseif ($null -eq $expected -or $null -eq $actual) {
-            throw "Difference at ${path}: one side is null, the other is not"
-        }
-        elseif ($expected -is [System.Collections.IDictionary] -and $actual -is [System.Collections.IDictionary]) {
-            $allKeys = $expected.Keys + $actual.Keys | Sort-Object -Unique
-            foreach ($k in $allKeys) {
-                Compare-JsonSemantic $expected[$k] $actual[$k] ("${path}.$k")
-            }
-        }
-        elseif ($expected -is [System.Collections.IEnumerable] -and $expected -isnot [string] -and
-                $actual -is [System.Collections.IEnumerable] -and $actual -isnot [string]) {
-            $expectedArray = @($expected)
-            $actualArray   = @($actual)
-            if ($expectedArray.Count -ne $actualArray.Count) {
-                throw "Difference at ${path}: array lengths differ ($($expectedArray.Count) vs $($actualArray.Count))"
-            }
-            for ($i = 0; $i -lt $expectedArray.Count; $i++) {
-                Compare-JsonSemantic $expectedArray[$i] $actualArray[$i] ("${path}[$i]")
-            }
-        }
-        elseif ($expected -is [System.Collections.IEnumerable] -and $expected -isnot [string] -and
-                ($actual -isnot [System.Collections.IEnumerable] -or $actual -is [string])) {
-            if ($expected.Count -eq 1 -and $expected[0] -eq $actual) { return }
-            throw "Difference at ${path}: expected array, actual scalar"
-        }
-        elseif (($expected -isnot [System.Collections.IEnumerable] -or $expected -is [string]) -and
-                $actual -is [System.Collections.IEnumerable] -and $actual -isnot [string]) {
-            if ($actual.Count -eq 1 -and $actual[0] -eq $expected) { return }
-            throw "Difference at ${path}: expected scalar, actual array"
-        }
-        else {
-            if ($expected -ne $actual) {
-                throw "Difference at ${path}: expected '$expected', got '$actual'"
-            }
-        }
-    }
-
     It "serializes to JSON and back to VIPB with no data loss" {
+
+        function Compare-JsonSemantic($expected, $actual, $path = "") {
+            if ($null -eq $expected -and $null -eq $actual) { return }
+            elseif ($null -eq $expected -or $null -eq $actual) {
+                throw "Difference at ${path}: one side is null, the other is not"
+            }
+            elseif ($expected -is [System.Collections.IDictionary] -and $actual -is [System.Collections.IDictionary]) {
+                $allKeys = $expected.Keys + $actual.Keys | Sort-Object -Unique
+                foreach ($k in $allKeys) {
+                    Compare-JsonSemantic $expected[$k] $actual[$k] ("${path}.$k")
+                }
+            }
+            elseif ($expected -is [System.Collections.IEnumerable] -and $expected -isnot [string] -and
+                    $actual -is [System.Collections.IEnumerable] -and $actual -isnot [string]) {
+                $expectedArray = @($expected)
+                $actualArray   = @($actual)
+                if ($expectedArray.Count -ne $actualArray.Count) {
+                    throw "Difference at ${path}: array lengths differ ($($expectedArray.Count) vs $($actualArray.Count))"
+                }
+                for ($i = 0; $i -lt $expectedArray.Count; $i++) {
+                    Compare-JsonSemantic $expectedArray[$i] $actualArray[$i] ("${path}[$i]")
+                }
+            }
+            elseif ($expected -is [System.Collections.IEnumerable] -and $expected -isnot [string] -and
+                    ($actual -isnot [System.Collections.IEnumerable] -or $actual -is [string])) {
+                if ($expected.Count -eq 1 -and $expected[0] -eq $actual) { return }
+                throw "Difference at ${path}: expected array, actual scalar"
+            }
+            elseif (($expected -isnot [System.Collections.IEnumerable] -or $expected -is [string]) -and
+                    $actual -is [System.Collections.IEnumerable] -and $actual -isnot [string]) {
+                if ($actual.Count -eq 1 -and $actual[0] -eq $expected) { return }
+                throw "Difference at ${path}: expected scalar, actual array"
+            }
+            else {
+                if ($expected -ne $actual) {
+                    throw "Difference at ${path}: expected '$expected', got '$actual'"
+                }
+            }
+        }
+
         $origVipb = "tests/Samples/NI Icon editor.vipb"
         $tmpJson1 = [IO.Path]::GetTempFileName()
         $tmpVipb2 = [IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName() + ".vipb")
