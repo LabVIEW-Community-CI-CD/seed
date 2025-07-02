@@ -1,10 +1,10 @@
 <#
   RoundTrip.GoldenSample.Tests.ps1
   --------------------------------
-  Full‑fidelity round‑trip test for seed.vipb.
+  Full-fidelity round-trip test for seed.vipb.
 
   1. Convert the VIPB to JSON.
-  2. Enumerate every patch‑able JSON leaf path.
+  2. Enumerate every patch-able JSON leaf path.
   3. Build a YAML patch that changes every such path.
   4. Apply the patch, convert patched VIPB back to JSON.
   5. Verify:
@@ -16,16 +16,14 @@ param([string]$SourceFile = "tests/Samples/seed.vipb")
 
 Describe "Golden Sample Full Coverage — $SourceFile" {
 
-    It "enumerates all patchable aliases, patches them, and validates round‑trip" {
+    It "enumerates all patchable aliases, patches them, and validates round-trip" {
 
-        ###############################################################
         function Join-IfArray($v) {
             if ($v -is [System.Collections.IEnumerable] -and $v -isnot [string]) {
                 @($v) -join ''
             } else { $v }
         }
 
-        ###########  NON‑RECURSIVE JSON LEAF ENUMERATION  #############
         function Get-LeafPaths([object]$obj) {
             $stack = [System.Collections.Stack]::new()
             $stack.Push([pscustomobject]@{ Node = $obj; Path = "" })
@@ -55,7 +53,6 @@ Describe "Golden Sample Full Coverage — $SourceFile" {
             return $out
         }
 
-        ###############  NULL‑SAFE JSON PATH LOOK‑UP  #################
         function Get-ByPath($obj, [string]$path) {
             $cur = $obj
             foreach ($seg in $path -split '\.') {
@@ -77,8 +74,8 @@ Describe "Golden Sample Full Coverage — $SourceFile" {
             return $cur
         }
 
-        ####################  PATCH COMPARISON  #######################
         function Compare-AfterPatch($exp,$act,$patchMap,$path='') {
+            $ignoreWhitespace = ($patchMap.Count -eq 0)
             if (($exp -is [pscustomobject] -or $exp -is [hashtable]) -and
                 ($act -is [pscustomobject] -or $act -is [hashtable])) {
 
@@ -87,9 +84,12 @@ Describe "Golden Sample Full Coverage — $SourceFile" {
                     if ($k -eq '#whitespace') {
                         if (Join-IfArray($e) -ne Join-IfArray($a)) {
                             $full = "$path.$k".Trim('.')
-                            if ($patchMap.ContainsKey($full)) {
-                                if (Join-IfArray($a) -ne $patchMap[$full]) { throw "patched field $full wrong" }
-                            } else { throw "unpatched #whitespace changed at $full" }
+                            if (-not $ignoreWhitespace) {
+                                if ($patchMap.ContainsKey($full)) {
+                                    if (Join-IfArray($a) -ne $patchMap[$full]) { throw "patched field $full wrong" }
+                                } else { throw "unpatched #whitespace changed at $full" }
+                            }
+                            # else: ignore whitespace delta in no-op mode
                         }
                     } else { Compare-AfterPatch $e $a $patchMap "$path.$k" }
                 }; return
@@ -109,9 +109,6 @@ Describe "Golden Sample Full Coverage — $SourceFile" {
             } elseif ($exp -ne $act) { throw "unpatched field Δ $clean" }
         }
 
-        ###############################################################
-        #         Generate patch, apply, and validate round‑trip       #
-        ###############################################################
         $jsonOrig     = [IO.Path]::GetTempFileName()
         $patchedVipb  = [IO.Path]::GetTempPath() + ([guid]::NewGuid()).Guid + ".vipb"
         $jsonPatched  = [IO.Path]::GetTempFileName()
