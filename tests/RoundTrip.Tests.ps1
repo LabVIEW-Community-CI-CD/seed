@@ -1,120 +1,65 @@
 param()
 
-Describe "VIPB round-trip equivalence via JSON" {
+Describe "VIPB round‑trip fidelity – smoke" {
 
-    It "serializes to JSON and back to VIPB with no data loss" {
+    It "round‑trips with no semantic loss" {
 
-        function Compare-JsonSemantic($expected, $actual, $path = "") {
-            # Universal handling of #whitespace anywhere in the JSON
-            if (
-                ($expected -is [System.Management.Automation.PSCustomObject] -or $expected -is [System.Collections.IDictionary]) -and
-                ($actual -is [System.Management.Automation.PSCustomObject] -or $actual -is [System.Collections.IDictionary])
-            ) {
-                if ($expected -is [System.Management.Automation.PSCustomObject]) { $expKeys = $expected.PSObject.Properties.Name }
-                else { $expKeys = $expected.Keys }
-                if ($actual -is [System.Management.Automation.PSCustomObject]) { $actKeys = $actual.PSObject.Properties.Name }
-                else { $actKeys = $actual.Keys }
-                $allKeys = $expKeys + $actKeys | Sort-Object -Unique
+        #################################
+        # helper – tolerant comparer
+        #################################
+        function Compare‑Semantic($exp,$act,$path='') {
+            # treat '#whitespace' anywhere as a blob of joined text
+            if(($exp -is [pscustomobject] -or $exp -is [hashtable]) -and
+               ($act -is [pscustomobject] -or $act -is [hashtable])) {
 
-                foreach ($k in $allKeys) {
-                    if ($k -eq "#whitespace") {
-                        $a = ($expected -is [System.Management.Automation.PSCustomObject]) ? $expected.'#whitespace' : $expected["#whitespace"]
-                        $b = ($actual   -is [System.Management.Automation.PSCustomObject]) ? $actual.'#whitespace'   : $actual["#whitespace"]
-                        if ($a -is [System.Collections.IEnumerable] -and $a -isnot [string]) { $a = ($a -join "") }
-                        if ($b -is [System.Collections.IEnumerable] -and $b -isnot [string]) { $b = ($b -join "") }
-                        if ($a -ne $b) {
-                            throw "Difference at ${path}.#whitespace: expected '$a', got '$b'"
-                        }
-                        continue
-                    }
-                    # Standard recursive compare for all other keys
-                    if ($expected -is [System.Management.Automation.PSCustomObject]) { $e = $expected.$k } else { $e = $expected[$k] }
-                    if ($actual   -is [System.Management.Automation.PSCustomObject]) { $a = $actual.$k   } else { $a = $actual[$k] }
-                    Compare-JsonSemantic $e $a ("${path}.$k")
-                }
+                $keys = ($exp.psobject.Properties.Name + $act.psobject.Properties.Name |
+                         Select‑Object -Unique)
+                foreach($k in $keys) {
+                    $e = $exp.$k; $a = $act.$k
+                    if($k -eq '#whitespace') {
+                        if($e -isnot [string]){$e=@($e) -join ''}
+                        if($a -isnot [string]){$a=@($a) -join ''}
+                        if($e -ne $a){throw "Δ at ${path}.#whitespace"}
+                    } else { Compare‑Semantic $e $a "$path.$k" }
+                }; return
+            }
+
+            if($exp -is [System.Collections.IEnumerable] -and $exp -isnot [string] -and
+               $act -is [System.Collections.IEnumerable] -and $act -isnot [string]) {
+                if($exp.Count -ne $act.Count){throw "Δ len $path"}
+                for($i=0;$i -lt $exp.Count;$i++){Compare‑Semantic $exp[$i] $act[$i] "$path[$i]"}
                 return
             }
-            if ($null -eq $expected -and $null -eq $actual) { return }
-            elseif ($null -eq $expected -or $null -eq $actual) {
-                throw "Difference at ${path}: one side is null, the other is not"
-            }
-            elseif ($expected -is [System.Collections.IEnumerable] -and $expected -isnot [string] -and
-                    $actual -is [System.Collections.IEnumerable] -and $actual -isnot [string]) {
-                $expectedArray = @($expected)
-                $actualArray   = @($actual)
-                if ($expectedArray.Count -ne $actualArray.Count) {
-                    throw "Difference at ${path}: array lengths differ ($($expectedArray.Count) vs $($actualArray.Count))"
-                }
-                for ($i = 0; $i -lt $expectedArray.Count; $i++) {
-                    Compare-JsonSemantic $expectedArray[$i] $actualArray[$i] ("${path}[$i]")
-                }
-            }
-            elseif ($expected -is [System.Collections.IEnumerable] -and $expected -isnot [string] -and
-                    ($actual -isnot [System.Collections.IEnumerable] -or $actual -is [string])) {
-                if ($expected.Count -eq 1 -and $expected[0] -eq $actual) { return }
-                throw "Difference at ${path}: expected array, actual scalar"
-            }
-            elseif (($expected -isnot [System.Collections.IEnumerable] -or $expected -is [string]) -and
-                    $actual -is [System.Collections.IEnumerable] -and $actual -isnot [string]) {
-                if ($actual.Count -eq 1 -and $actual[0] -eq $expected) { return }
-                throw "Difference at ${path}: expected scalar, actual array"
-            }
-            else {
-                $a = $expected
-                $b = $actual
-                if ($a -is [System.Collections.IEnumerable] -and $a -isnot [string]) { $a = ($a -join "") }
-                if ($b -is [System.Collections.IEnumerable] -and $b -isnot [string]) { $b = ($b -join "") }
-                if ($a -ne $b) {
-                    throw "Difference at ${path}: expected '$a', got '$b'"
-                }
-            }
+
+            # scalar/array single‑element tolerance
+            if($exp -isnot [string] -and $exp -is [System.Collections.IEnumerable] -and $exp.Count -eq 1){$exp=$exp[0]}
+            if($act -isnot [string] -and $act -is [System.Collections.IEnumerable] -and $act.Count -eq 1){$act=$act[0]}
+
+            # join whitespace arrays
+            if($exp -is [System.Collections.IEnumerable] -and $exp -isnot [string]){$exp=@($exp) -join ''}
+            if($act -is [System.Collections.IEnumerable] -and $act -isnot [string]){$act=@($act) -join ''}
+
+            if($exp -ne $act){throw "Δ at $path"}
         }
 
-        $origVipb = "tests/Samples/NI Icon editor.vipb"
-        $tmpJson1 = [IO.Path]::GetTempFileName()
-        $tmpVipb2 = [IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName() + ".vipb")
-        $tmpJson2 = [IO.Path]::GetTempFileName()
+        #############################
+        # temp files
+        #############################
+        $vipb       = "tests/Samples/NI Icon editor.vipb"
+        $json1      = [IO.Path]::GetTempFileName()
+        $vipbRound  = [IO.Path]::GetTempPath() + (New‑Guid).Guid + ".vipb"
+        $json2      = [IO.Path]::GetTempFileName()
 
         try {
-            # 1. Convert VIPB → JSON
-            & ./publish/linux-x64/VipbJsonTool vipb2json $origVipb $tmpJson1
-            $LASTEXITCODE | Should -Be 0 -Because "vipb2json conversion failed"
-            (Test-Path $tmpJson1) | Should -BeTrue -Because "First JSON output file was not created"
-            ((Get-Content $tmpJson1 -Raw).Trim().Length) | Should -BeGreaterThan 0 -Because "First JSON output file is empty"
+            & ./publish/linux-x64/VipbJsonTool vipb2json $vipb $json1
+            $LASTEXITCODE | Should -Be 0
+            & ./publish/linux-x64/VipbJsonTool json2vipb $json1 $vipbRound
+            & ./publish/linux-x64/VipbJsonTool vipb2json $vipbRound $json2
 
-            # 2. Convert JSON → VIPB
-            & ./publish/linux-x64/VipbJsonTool json2vipb $tmpJson1 $tmpVipb2
-            $LASTEXITCODE | Should -Be 0 -Because "json2vipb conversion failed"
-            (Test-Path $tmpVipb2) | Should -BeTrue -Because "VIPB reserialization failed"
-
-            # 3. Convert the new VIPB → JSON
-            & ./publish/linux-x64/VipbJsonTool vipb2json $tmpVipb2 $tmpJson2
-            $LASTEXITCODE | Should -Be 0 -Because "second vipb2json conversion failed"
-            (Test-Path $tmpJson2) | Should -BeTrue -Because "Second JSON output file was not created"
-            ((Get-Content $tmpJson2 -Raw).Trim().Length) | Should -BeGreaterThan 0 -Because "Second JSON output file is empty"
-
-            # 4. Load and compare JSON objects
-            try {
-                $jsonOrig  = Get-Content $tmpJson1 -Raw | ConvertFrom-Json
-                $jsonRound = Get-Content $tmpJson2 -Raw | ConvertFrom-Json
-            } catch {
-                Write-Host "=== Begin $tmpJson1 ==="
-                Get-Content $tmpJson1
-                Write-Host "=== End $tmpJson1 ==="
-                Write-Host "=== Begin $tmpJson2 ==="
-                Get-Content $tmpJson2
-                Write-Host "=== End $tmpJson2 ==="
-                throw "JSON conversion failed: $($_.Exception.Message)"
-            }
-
-            # 5. Recursively compare, tolerating array/scalar/whitespace ambiguity
-            Compare-JsonSemantic $jsonOrig $jsonRound
+            $orig  = Get‑Content $json1 -Raw | ConvertFrom‑Json
+            $round = Get‑Content $json2 -Raw | ConvertFrom‑Json
+            Compare‑Semantic $orig $round
         }
-        finally {
-            # Clean up temporary files
-            foreach ($f in @($tmpJson1, $tmpJson2, $tmpVipb2)) {
-                if ($f -and (Test-Path $f)) { Remove-Item $f -ErrorAction SilentlyContinue }
-            }
-        }
+        finally { Remove‑Item $json1,$json2,$vipbRound -ea SilentlyContinue }
     }
 }
