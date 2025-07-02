@@ -6,21 +6,31 @@ Describe "VIPB round-trip equivalence via JSON" {
 
         function Compare-JsonSemantic($expected, $actual, $path = "") {
             # Special-case root #whitespace
-            if ($path -eq "" -and $expected.ContainsKey("#whitespace") -and $actual.ContainsKey("#whitespace")) {
-                $a = $expected["#whitespace"]
-                $b = $actual["#whitespace"]
+            if (
+                $path -eq "" -and
+                $expected.PSObject.Properties.Name -contains '#whitespace' -and
+                $actual.PSObject.Properties.Name -contains '#whitespace'
+            ) {
+                $a = $expected.'#whitespace'
+                $b = $actual.'#whitespace'
                 if ($a -is [System.Collections.IEnumerable] -and $a -isnot [string]) { $a = ($a -join "") }
                 if ($b -is [System.Collections.IEnumerable] -and $b -isnot [string]) { $b = ($b -join "") }
                 if ($a -ne $b) {
                     throw "Difference at ${path}.#whitespace: expected '$a', got '$b'"
                 }
-                $expected.Remove("#whitespace")
-                $actual.Remove("#whitespace")
+                $expected.PSObject.Properties.Remove('#whitespace')
+                $actual.PSObject.Properties.Remove('#whitespace')
             }
 
             if ($null -eq $expected -and $null -eq $actual) { return }
             elseif ($null -eq $expected -or $null -eq $actual) {
                 throw "Difference at ${path}: one side is null, the other is not"
+            }
+            elseif ($expected -is [System.Management.Automation.PSCustomObject] -and $actual -is [System.Management.Automation.PSCustomObject]) {
+                $allKeys = $expected.PSObject.Properties.Name + $actual.PSObject.Properties.Name | Sort-Object -Unique
+                foreach ($k in $allKeys) {
+                    Compare-JsonSemantic $expected.$k $actual.$k ("${path}.$k")
+                }
             }
             elseif ($expected -is [System.Collections.IDictionary] -and $actual -is [System.Collections.IDictionary]) {
                 $allKeys = $expected.Keys + $actual.Keys | Sort-Object -Unique
