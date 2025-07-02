@@ -1,117 +1,140 @@
-using System;
-using System.IO;
-using System.Xml;
-using Newtonsoft.Json;
+name: build-test-release
 
-namespace VipbJsonTool
-{
-    class Program
-    {
-        static int Main(string[] args)
-        {
-            if (args.Length < 3)
-            {
-                Console.Error.WriteLine("Usage: VipbJsonTool <mode> <input> <output>");
-                return 1;
-            }
+on:
+  push:
+    branches: [ main ]
+    tags:    [ 'v*' ]
+  pull_request:
+    branches: [ main ]
 
-            string mode       = args[0].ToLower();
-            string inputPath  = args[1];
-            string outputPath = args[2];
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: pwsh
 
-            // Ensure the output directory exists
-            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+    steps:
+      # --- source code ---------------------------------------------------------
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-            try
-            {
-                switch (mode)
-                {
-                    case "vipb2json":      ConvertXmlToJson(inputPath, outputPath, "Package"); break;
-                    case "json2vipb":      ConvertJsonToXml(inputPath, outputPath, "Package"); break;
-                    case "lvproj2json":    ConvertXmlToJson(inputPath, outputPath, "Project"); break;
-                    case "json2lvproj":    ConvertJsonToXml(inputPath, outputPath, "Project"); break;
-                    case "buildspec2json": ConvertBuildSpecToJson(inputPath, outputPath);       break;
-                    case "json2buildspec": ConvertJsonToBuildSpec(inputPath, outputPath);       break;
-                    default:
-                        Console.Error.WriteLine($"ERROR: Unknown mode '{mode}'");
-                        return 1;
-                }
+      # --- .NET SDK ------------------------------------------------------------
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+          cache: true
+          cache-dependency-path: |
+            **/*.csproj
+            **/*.sln
 
-                Console.WriteLine($"Successfully executed {mode}");
-                return 0;
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"ERROR: {ex.Message}");
-                return 1;
-            }
-        }
+      # --- restore & build -----------------------------------------------------
+      - name: Restore packages
+        run: dotnet restore src/VipbJsonTool/VipbJsonTool.csproj
 
-        //----------------------------------------------------------------------
-        // XML ➜ JSON
-        //----------------------------------------------------------------------
+      - name: Build (warnings ≠ errors)
+        run: dotnet build src/VipbJsonTool/VipbJsonTool.csproj `
+                          -c Release `
+                          -p:TreatWarningsAsErrors=false `
+                          --no-restore
 
-        private static void ConvertXmlToJson(string xmlPath, string jsonPath, string rootElementName)
-        {
-            if (!File.Exists(xmlPath))
-                throw new FileNotFoundException($"Input file not found: {xmlPath}");
+      # --- publish single‑file CLI --------------------------------------------
+      - name: Publish CLI (linux‑x64 single‑file)
+        run: dotnet publish src/VipbJsonTool `
+                            -c Release `
+                            -r linux-x64 `
+                            --self-contained `
+                            -p:PublishSingleFile=true `
+                            -p:TreatWarningsAsErrors=false `
+                            --no-restore `
+                            --no-build `
+                            -o publish/linux-x64
 
-            var doc = new XmlDocument { PreserveWhitespace = true };
-            doc.Load(xmlPath);
+      # --- PowerShell test prerequisites --------------------------------------
+      - name: Install Pester
+        run: Install-Module Pester -Force -Scope CurrentUser
 
-            if (doc.DocumentElement?.Name != rootElementName)
-                throw new InvalidOperationException($"Invalid root element. Expected '{rootElementName}'.");
+      # --- Run CLI round‑trip tests (LVPROJ only) ------------------------------
+      - name: Run CLI conversion tests (LVPROJ round‑trip)
+        run: |
+          New-Item -ItemType Directory -Force -Path tests/tmp | Out-Null
 
-            // ------------------------------------------------------------------
-            // FIX: Use explicit Newtonsoft.Json.Formatting to avoid ambiguity!
-            // ------------------------------------------------------------------
-            string json = JsonConvert.SerializeXmlNode(
-                doc,
-                Newtonsoft.Json.Formatting.Indented,   // unambiguous enum
-                /* omitRootObject: */ false
-            );
-            File.WriteAllText(jsonPath, json);
-        }
+          # LVPROJ native modes
+          dotnet run --project src/VipbJsonTool lvproj2json `
+            tests/Samples/seed.lvproj tests/tmp/seed.lvproj.json
+          dotnet run --project src/VipbJsonTool json2lvproj `
+            tests/tmp/seed.lvproj.json tests/tmp/seed.roundtrip.lvproj
 
-        //----------------------------------------------------------------------
-        // JSON ➜ XML
-        //----------------------------------------------------------------------
+          # Unified wrapper modes (should work identically on LVPROJ)
+          dotnet run --project src/VipbJsonTool buildspec2json `
+            tests/Samples/seed.lvproj tests/tmp/seed.lvproj.json
+          dotnet run --project src/VipbJsonTool json2buildspec `
+            tests/tmp/seed.lvproj.json tests/tmp/seed.roundtrip.lvproj
 
-        private static void ConvertJsonToXml(string jsonPath, string xmlPath, string rootElementName)
-        {
-            if (!File.Exists(jsonPath))
-                throw new FileNotFoundException($"Input file not found: {jsonPath}");
+          # -----------------------------------------------------------------------------
+          # The VIPB sample in the repo is *not* a real .vipb package (its root is <Project>),
+          # so these commands will always fail.  Uncomment once a valid VIPB file exists.
+          # -----------------------------------------------------------------------------
+          # dotnet run --project src/VipbJsonTool vipb2json `
+          #   tests/Samples/seed.vipb tests/tmp/seed.vipb.json
+          # dotnet run --project src/VipbJsonTool json2vipb `
+          #   tests/tmp/seed.vipb.json tests/tmp/seed.roundtrip.vipb
+          # dotnet run --project src/VipbJsonTool buildspec2json `
+          #   tests/Samples/seed.vipb tests/tmp/seed.vipb.json
+          # dotnet run --project src/VipbJsonTool json2buildspec `
+          #   tests/tmp/seed.vipb.json tests/tmp/seed.roundtrip.vipb
 
-            string json = File.ReadAllText(jsonPath);
+      # --- Run Pester tests ----------------------------------------------------
+      - name: Run Pester tests (Basic and Golden Sample)
+        run: |
+          $failures = $false
+          $resultBasic  = Invoke-Pester -Configuration @{
+            Run = @{ Path = 'tests/RoundTrip.Tests.ps1';           PassThru = $true }
+            TestResult = @{ Enabled = $true; OutputFormat = 'NUnitXml'; OutputPath = 'basic-test-results.xml' }
+          }
+          if ($resultBasic.FailedCount -gt 0) { $failures = $true }
+          $resultGolden = Invoke-Pester -Configuration @{
+            Run = @{ Path = 'tests/RoundTrip.GoldenSample.Tests.ps1'; PassThru = $true }
+            TestResult = @{ Enabled = $true; OutputFormat = 'NUnitXml'; OutputPath = 'golden-sample-results.xml' }
+          }
+          if ($resultGolden.FailedCount -gt 0) { $failures = $true }
+          if ($failures) { exit 1 }
 
-            // Let Json.NET infer the root. We'll validate afterwards.
-            var xmlDoc = JsonConvert.DeserializeXmlNode(json)!;
+      # --- Upload Test Results -------------------------------------------------
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: pester-test-results
+          path: |
+            basic-test-results.xml
+            golden-sample-results.xml
+          if-no-files-found: warn
 
-            if (xmlDoc.DocumentElement?.Name != rootElementName)
-                throw new InvalidOperationException($"Invalid root element. Expected '{rootElementName}'.");
+      # --- Docker build/publish (unchanged) ------------------------------------
+      - name: Build Docker image
+        run: docker build -t ghcr.io/labview-community-ci-cd/seed:${{ github.sha }} .
 
-            using var writer = XmlWriter.Create(xmlPath, new XmlWriterSettings { Indent = true });
-            xmlDoc.Save(writer);
-        }
+      - name: Docker login, tag & push
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
 
-        //----------------------------------------------------------------------
-        // Build‑spec helpers (unchanged)
-        //----------------------------------------------------------------------
+      - name: Tag Docker images
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+        run: |
+          docker tag ghcr.io/labview-community-ci-cd/seed:${{ github.sha }} ghcr.io/labview-community-ci-cd/seed:latest
+          docker tag ghcr.io/labview-community-ci-cd/seed:${{ github.sha }} ghcr.io/labview-community-ci-cd/seed:v2
+          docker tag ghcr.io/labview-community-ci-cd/seed:${{ github.sha }} ghcr.io/labview-community-ci-cd/seed:${{ github.ref_name }}
 
-        private static void ConvertBuildSpecToJson(string inputPath, string outputPath)
-        {
-            string ext = Path.GetExtension(inputPath).ToLowerInvariant();
-            if (ext == ".vipb")      ConvertXmlToJson(inputPath, outputPath, "Package");
-            else if (ext == ".lvproj") ConvertXmlToJson(inputPath, outputPath, "Project");
-            else throw new InvalidOperationException("Unsupported input file type for buildspec2json. Must be .vipb or .lvproj");
-        }
-
-        private static void ConvertJsonToBuildSpec(string inputPath, string outputPath)
-        {
-            string ext = Path.GetExtension(outputPath).ToLowerInvariant();
-            if (ext == ".vipb")      ConvertJsonToXml(inputPath, outputPath, "Package");
-            else if (ext == ".lvproj") ConvertJsonToXml(inputPath, outputPath, "Project");
-            else throw new InvalidOperationException("Unsupported output file type for json2buildspec. Must be .vipb or .lvproj");
-        }
-    }
-}
+      # --- artifact upload (CLI binary) ----------------------------------------
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vipb-json-cli-linux-x64
+          path: publish/linux-x64/VipbJsonTool
