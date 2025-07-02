@@ -1,171 +1,223 @@
 <#
   RoundTrip.GoldenSample.Tests.ps1
   --------------------------------
-  Full-fidelity round-trip test for seed.vipb.
+  Full-fidelity round-trip tests for seed.vipb and seed.lvproj.
 
-  1. Convert the VIPB to JSON.
-  2. Enumerate every patch-able JSON leaf path.
+  For each file:
+  1. Convert the file (VIPB or LVPROJ) to JSON.
+  2. Enumerate every patchable JSON leaf path.
   3. Build a YAML patch that changes every such path.
-  4. Apply the patch, convert patched VIPB back to JSON.
+  4. Apply the patch, convert the patched file back to JSON.
   5. Verify:
        • Patched paths changed to the expected value.
        • All other paths remained identical.
 #>
 
-param([string]$SourceFile = "tests/Samples/seed.vipb")
+Describe "Golden Sample Full Coverage — VIPB and LVPROJ" {
 
-Describe "Golden Sample Full Coverage — $SourceFile" {
-
-    It "enumerates all patchable aliases, patches them, and validates round-trip" {
-
-        function Join-IfArray($v) {
-            if ($v -is [System.Collections.IEnumerable] -and $v -isnot [string]) {
-                @($v) -join ''
-            } else { $v }
+    # Helper functions for JSON traversal and comparison
+    function Join-IfArray($v) {
+        if ($v -is [System.Collections.IEnumerable] -and $v -isnot [string]) {
+            @($v) -join ''
+        } else {
+            $v
         }
+    }
 
-        function Get-LeafPaths([object]$obj) {
-            $stack = [System.Collections.Stack]::new()
-            $stack.Push([pscustomobject]@{ Node = $obj; Path = "" })
-            $out = New-Object System.Collections.Generic.List[string]
-
-            while ($stack.Count) {
-                $frame = $stack.Pop()
-                $n  = $frame.Node
-                $pp = $frame.Path
-
-                if ($n -is [pscustomobject]) {
-                    foreach ($p in $n.psobject.Properties) {
-                        $stack.Push([pscustomobject]@{ Node = $p.Value; Path = ($pp ? "$pp.$($p.Name)" : $p.Name) })
-                    }
-                }
-                elseif ($n -is [System.Collections.IEnumerable] -and $n -isnot [string]) {
-                    $i = 0
-                    foreach ($v in $n) {
-                        $stack.Push([pscustomobject]@{ Node = $v; Path = "$pp[$i]" })
-                        $i++
-                    }
-                }
-                else {
-                    if ($pp) { $out.Add($pp) }
+    function Get-LeafPaths([object]$obj) {
+        $stack = [System.Collections.Stack]::new()
+        $stack.Push([pscustomobject]@{ Node = $obj; Path = "" })
+        $out = New-Object System.Collections.Generic.List[string]
+        while ($stack.Count) {
+            $frame = $stack.Pop()
+            $node  = $frame.Node
+            $path  = $frame.Path
+            if ($node -is [pscustomobject] -or $node -is [hashtable]) {
+                foreach ($p in $node.psobject.Properties) {
+                    $newPath = ($path ? "$path.$($p.Name)" : $p.Name)
+                    $stack.Push([pscustomobject]@{ Node = $p.Value; Path = $newPath })
                 }
             }
-            return $out
-        }
-
-        function Get-ByPath($obj, [string]$path) {
-            $cur = $obj
-            foreach ($seg in $path -split '\.') {
-                if ($null -eq $cur) { return $null }
-                # handle zero or more [index] segments after an optional base
-                if ($seg -match '^(.*?)((\[\d+\])+)$') {
-                    $base = $Matches[1]
-                    $tail = $Matches[2]
-                    if ($base) { $cur = $cur[$base] }
-                    foreach ($m in ([regex]::Matches($tail, '\[(\d+)\]'))) {
-                        if ($null -eq $cur) { return $null }
-                        $cur = $cur[[int]$m.Groups[1].Value]
-                    }
-                }
-                else {
-                    $cur = $cur[$seg]
+            elseif ($node -is [System.Collections.IEnumerable] -and $node -isnot [string]) {
+                $i = 0
+                foreach ($v in $node) {
+                    $stack.Push([pscustomobject]@{ Node = $v; Path = "$path[$i]" })
+                    $i++
                 }
             }
-            return $cur
+            else {
+                if ($path) { $out.Add($path) }
+            }
         }
+        return $out
+    }
 
-        function Compare-AfterPatch($exp,$act,$patchMap,$path='') {
-            $ignoreWhitespace = ($patchMap.Count -eq 0)
-            if (($exp -is [pscustomobject] -or $exp -is [hashtable]) -and
-                ($act -is [pscustomobject] -or $act -is [hashtable])) {
+    function Get-ByPath($obj, [string]$path) {
+        $cur = $obj
+        foreach ($seg in $path -split '\.') {
+            if ($null -eq $cur) { return $null }
+            # Handle any [index] segments in the path
+            if ($seg -match '^(.*?)((\[\d+\])+)$') {
+                $base = $Matches[1]
+                $indices = $Matches[2]
+                if ($base) { $cur = $cur[$base] }
+                foreach ($m in ([regex]::Matches($indices, '\[(\d+)\]'))) {
+                    if ($null -eq $cur) { return $null }
+                    $cur = $cur[[int]$m.Groups[1].Value]
+                }
+            }
+            else {
+                $cur = $cur[$seg]
+            }
+        }
+        return $cur
+    }
 
-                foreach ($k in ($exp.psobject.Properties.Name + $act.psobject.Properties.Name | Sort-Object -Unique)) {
-                    $e=$exp.$k; $a=$act.$k
-                    if ($k -eq '#whitespace') {
-                        if (Join-IfArray($e) -ne Join-IfArray($a)) {
-                            $full = "$path.$k".Trim('.')
-                            if (-not $ignoreWhitespace) {
-                                if ($patchMap.ContainsKey($full)) {
-                                    if (Join-IfArray($a) -ne $patchMap[$full]) { throw "patched field $full wrong" }
-                                } else { throw "unpatched #whitespace changed at $full" }
+    function Compare-AfterPatch($expected, $actual, $patchMap, $path='') {
+        $ignoreWhitespace = ($patchMap.Count -eq 0)
+        if ((($expected -is [pscustomobject]) -or ($expected -is [hashtable])) -and 
+            (($actual   -is [pscustomobject]) -or ($actual   -is [hashtable]))) {
+            # Compare all keys in the combined set
+            foreach ($key in ($expected.psobject.Properties.Name + $actual.psobject.Properties.Name | Sort-Object -Unique)) {
+                $expVal = $expected.$key
+                $actVal = $actual.$key
+                if ($key -eq '#whitespace') {
+                    # Normalize whitespace nodes to strings for comparison
+                    if (Join-IfArray($expVal) -ne Join-IfArray($actVal)) {
+                        $fullPath = "$path.$key".Trim('.')
+                        if (-not $ignoreWhitespace) {
+                            if ($patchMap.ContainsKey($fullPath)) {
+                                if (Join-IfArray($actVal) -ne $patchMap[$fullPath]) {
+                                    throw "patched field $fullPath has incorrect whitespace"
+                                }
+                            } else {
+                                throw "unpatched #whitespace changed at $fullPath"
                             }
-                            # else: ignore whitespace delta in no-op mode
                         }
-                    } else { Compare-AfterPatch $e $a $patchMap "$path.$k" }
-                }; return
+                        # If ignoring whitespace (no patches), do nothing on whitespace diffs
+                    }
+                }
+                else {
+                    Compare-AfterPatch $expVal $actVal $patchMap "$path.$key"
+                }
             }
-
-            if ($exp -is [System.Collections.IEnumerable] -and $exp -isnot [string] -and
-                $act -is [System.Collections.IEnumerable] -and $act -isnot [string]) {
-                if ($exp.Count -ne $act.Count) { throw "array len Δ $path" }
-                for ($i=0;$i -lt $exp.Count;$i++){Compare-AfterPatch $exp[$i] $act[$i] $patchMap "$path[$i]"}
-                return
+            return
+        }
+        elseif (($expected -is [System.Collections.IEnumerable] -and $expected -isnot [string]) -and
+                ($actual   -is [System.Collections.IEnumerable] -and $actual   -isnot [string])) {
+            # Compare arrays element-wise
+            if ($expected.Count -ne $actual.Count) {
+                throw "array length mismatch at $path"
             }
+            for ($i = 0; $i -lt $expected.Count; $i++) {
+                Compare-AfterPatch $expected[$i] $actual[$i] $patchMap "$path[$i]"
+            }
+            return
+        }
+        # For leaf values (scalars or single-element arrays), flatten any arrays for fair comparison
+        $expected = Join-IfArray($expected)
+        $actual   = Join-IfArray($actual)
+        $cleanPath = $path.TrimStart('.')
+        if ($patchMap.ContainsKey($cleanPath)) {
+            # Patched field: verify it matches the expected patched value
+            if ($actual -ne $patchMap[$cleanPath]) {
+                throw "patched field $cleanPath did not update correctly"
+            }
+        }
+        elseif ($expected -ne $actual) {
+            # Unpatched field changed, which is a failure
+            throw "unpatched field changed at $cleanPath"
+        }
+    }
 
-            $exp = Join-IfArray($exp); $act = Join-IfArray($act)
-            $clean = $path.TrimStart('.')
-            if ($patchMap.ContainsKey($clean)) {
-                if ($act -ne $patchMap[$clean]) { throw "patch fail $clean" }
-            } elseif ($exp -ne $act) { throw "unpatched field Δ $clean" }
+    function Test-RoundTrip($SourceFile) {
+        # Determine file type and corresponding CLI modes
+        $ext = ([IO.Path]::GetExtension($SourceFile)).ToLower()
+        switch ($ext) {
+            ".vipb"   { $toJsonMode = "vipb2json";  $toXmlMode = "json2vipb";  $patchMode = "patch2vipb"  }
+            ".lvproj" { $toJsonMode = "lvproj2json"; $toXmlMode = "json2lvproj"; $patchMode = "patch2lvproj" }
+            default   { throw "Unsupported file type: $ext" }
         }
 
-        $jsonOrig     = [IO.Path]::GetTempFileName()
-        $patchedVipb  = [IO.Path]::GetTempPath() + ([guid]::NewGuid()).Guid + ".vipb"
-        $jsonPatched  = [IO.Path]::GetTempFileName()
-        $patchYaml    = [IO.Path]::GetTempFileName()
+        # Temporary file paths for intermediate outputs
+        $jsonOrig    = [IO.Path]::GetTempFileName()
+        $patchedFile = [IO.Path]::GetTempPath() + ([guid]::NewGuid()).Guid + $ext
+        $jsonPatched = [IO.Path]::GetTempFileName()
+        $patchYaml   = [IO.Path]::GetTempFileName()
 
         try {
-            & ./publish/linux-x64/VipbJsonTool vipb2json $SourceFile $jsonOrig
+            # 1. Convert original file to JSON
+            & ./publish/linux-x64/VipbJsonTool $toJsonMode $SourceFile $jsonOrig
             $orig = Get-Content $jsonOrig -Raw | ConvertFrom-Json
 
+            # 2. Enumerate all patchable JSON leaf paths (exclude whitespace nodes and XML attributes)
             $allPaths = Get-LeafPaths $orig
             $patchMap = @{}
-
             foreach ($p in $allPaths) {
                 if ($p -like '*#whitespace*') { continue }
                 if ($p -match '^@')           { continue }
-
-                $origVal = Join-IfArray((Get-ByPath $orig $p))
+                $origVal = Join-IfArray (Get-ByPath $orig $p)
                 if ($null -eq $origVal) { continue }
-
-                if ($origVal -is [bool]) { $patchMap[$p] = -not $origVal }
-                elseif ($origVal -is [double] -or $origVal -is [int64]) { $patchMap[$p] = [double]$origVal + 1 }
-                else { $patchMap[$p] = '__PATCHED__' }
+                if ($origVal -is [bool]) {
+                    $patchMap[$p] = -not $origVal
+                }
+                elseif ($origVal -is [double] -or $origVal -is [int64]) {
+                    $patchMap[$p] = [double]$origVal + 1
+                }
+                else {
+                    $patchMap[$p] = '__PATCHED__'
+                }
             }
 
             if ($patchMap.Count -eq 0) {
-                Write-Host "No patchable fields found! Doing no-op round-trip check instead."
-                $vipbOut = [IO.Path]::GetTempPath() + ([guid]::NewGuid()).Guid + ".vipb"
+                # No fields to patch – perform a no-op round-trip and compare
+                Write-Host "No patchable fields found in $SourceFile! Performing no-op round-trip."
+                $tempOut = [IO.Path]::GetTempPath() + ([guid]::NewGuid()).Guid + $ext
                 $jsonOut = [IO.Path]::GetTempFileName()
-
-                & ./publish/linux-x64/VipbJsonTool json2vipb $jsonOrig $vipbOut
-                & ./publish/linux-x64/VipbJsonTool vipb2json $vipbOut $jsonOut
-
-                $round = Get-Content $jsonOut -Raw | ConvertFrom-Json
-                Compare-AfterPatch $orig $round @{}
-                Remove-Item $vipbOut, $jsonOut -ErrorAction SilentlyContinue
+                & ./publish/linux-x64/VipbJsonTool $toXmlMode $jsonOrig $tempOut
+                & ./publish/linux-x64/VipbJsonTool $toJsonMode $tempOut $jsonOut
+                $roundTripJson = Get-Content $jsonOut -Raw | ConvertFrom-Json
+                Compare-AfterPatch $orig $roundTripJson @{}  # Expect identical JSON (ignoring whitespace)
+                Remove-Item $tempOut, $jsonOut -ErrorAction SilentlyContinue
                 return
             }
 
-            # --- emit YAML file ---
-            $yaml = @("schema_version: 1","patch:")
-            foreach ($k in $patchMap.Keys) {
-                $v = $patchMap[$k]
-                if ($v -is [bool])        { $yaml += "  ${k}: $($v.ToString().ToLower())" }
-                elseif ($v -is [string])  { $yaml += "  ${k}: '$($v -replace '''','''''')'" }
-                else                     { $yaml += "  ${k}: $v" }
+            # 3. Build the YAML patch file with all patches
+            $yamlLines = @("schema_version: 1", "patch:")
+            foreach ($key in $patchMap.Keys) {
+                $val = $patchMap[$key]
+                if ($val -is [bool]) {
+                    $yamlLines += "  ${key}: $($val.ToString().ToLower())"
+                }
+                elseif ($val -is [string]) {
+                    # Quote string and escape any single quotes
+                    $yamlLines += "  ${key}: '$($val -replace '''','''''')'"
+                }
+                else {
+                    $yamlLines += "  ${key}: $val"
+                }
             }
-            Set-Content $patchYaml $yaml -Encoding utf8
+            Set-Content $patchYaml $yamlLines -Encoding utf8
 
-            # --- patch + re‑round‑trip ---
-            & ./publish/linux-x64/VipbJsonTool patch2vipb $jsonOrig $patchedVipb $patchYaml
-            & ./publish/linux-x64/VipbJsonTool vipb2json   $patchedVipb $jsonPatched
-            $patched = Get-Content $jsonPatched -Raw | ConvertFrom-Json
+            # 4. Apply the patch to the JSON and convert back to the original format
+            & ./publish/linux-x64/VipbJsonTool $patchMode $jsonOrig $patchedFile $patchYaml
+            & ./publish/linux-x64/VipbJsonTool $toJsonMode $patchedFile $jsonPatched
+            $patchedJson = Get-Content $jsonPatched -Raw | ConvertFrom-Json
 
-            Compare-AfterPatch $orig $patched $patchMap
+            # 5. Verify patched vs original JSON
+            Compare-AfterPatch $orig $patchedJson $patchMap
         }
         finally {
-            Remove-Item $jsonOrig,$jsonPatched,$patchedVipb,$patchYaml -ErrorAction SilentlyContinue
+            # Clean up temp files
+            Remove-Item $jsonOrig, $jsonPatched, $patchedFile, $patchYaml -ErrorAction SilentlyContinue
         }
+    }
+
+    It "maintains full round-trip fidelity for seed.vipb (with all fields patched)" {
+        Test-RoundTrip "tests/Samples/seed.vipb"
+    }
+
+    It "maintains full round-trip fidelity for seed.lvproj (with all fields patched)" {
+        Test-RoundTrip "tests/Samples/seed.lvproj"
     }
 }
