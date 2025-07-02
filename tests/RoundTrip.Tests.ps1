@@ -2,7 +2,6 @@ param()
 
 Describe "VIPB round-trip equivalence via JSON" {
 
-    # Recursively compares two JSON objects, treating single-element arrays and scalars as equivalent.
     function Compare-JsonSemantic($expected, $actual, $path = "") {
         if ($null -eq $expected -and $null -eq $actual) { return }
         elseif ($null -eq $expected -or $null -eq $actual) {
@@ -16,7 +15,6 @@ Describe "VIPB round-trip equivalence via JSON" {
         }
         elseif ($expected -is [System.Collections.IEnumerable] -and $expected -isnot [string] -and
                 $actual -is [System.Collections.IEnumerable] -and $actual -isnot [string]) {
-            # Both are arrays; compare each element
             $expectedArray = @($expected)
             $actualArray   = @($actual)
             if ($expectedArray.Count -ne $actualArray.Count) {
@@ -28,13 +26,11 @@ Describe "VIPB round-trip equivalence via JSON" {
         }
         elseif ($expected -is [System.Collections.IEnumerable] -and $expected -isnot [string] -and
                 ($actual -isnot [System.Collections.IEnumerable] -or $actual -is [string])) {
-            # expected is array, actual is scalar
             if ($expected.Count -eq 1 -and $expected[0] -eq $actual) { return }
             throw "Difference at ${path}: expected array, actual scalar"
         }
         elseif (($expected -isnot [System.Collections.IEnumerable] -or $expected -is [string]) -and
                 $actual -is [System.Collections.IEnumerable] -and $actual -isnot [string]) {
-            # expected is scalar, actual is array
             if ($actual.Count -eq 1 -and $actual[0] -eq $expected) { return }
             throw "Difference at ${path}: expected scalar, actual array"
         }
