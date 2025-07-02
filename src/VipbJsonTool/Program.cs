@@ -1,94 +1,132 @@
 using System;
 using System.IO;
-using System.Linq;
-using System.Text;
 using System.Xml;
 using Newtonsoft.Json;
 
 namespace VipbJsonTool
 {
-    internal static class Program
+    class Program
     {
-        private static int Main(string[] args)
+        static int Main(string[] args)
         {
             if (args.Length < 3)
             {
-                Console.Error.WriteLine("Usage:");
-                Console.Error.WriteLine("  VipbJsonTool vipb2json <in.vipb> <out.json>");
-                Console.Error.WriteLine("  VipbJsonTool json2vipb <in.json> <out.vipb>");
-                Console.Error.WriteLine("  VipbJsonTool patch2vipb <in.json> <out.vipb> <patch.yml>");
+                Console.Error.WriteLine("Usage: VipbJsonTool <mode> <input> <output>");
                 return 1;
             }
 
-            var mode    = args[0].ToLowerInvariant();
-            var inFile  = args[1];
-            var outFile = args[2];
+            string mode = args[0].ToLower();
+            string inputPath = args[1];
+            string outputPath = args[2];
+
+            // Ensure the output directory exists
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
 
             try
             {
                 switch (mode)
                 {
-                    // ----------------------------------------------------
-                    // VIPB → JSON
-                    // ----------------------------------------------------
                     case "vipb2json":
-                    {
-                        var doc = new XmlDocument { PreserveWhitespace = true };
-                        doc.Load(inFile);
-
-                        // Convert to JSON via helper that strips XML prolog
-                        var json = JsonToXmlConverter.XmlToJson(doc, omitRootObject: true);
-
-                        File.WriteAllText(outFile, json, Encoding.UTF8);
+                        ConvertXmlToJson(inputPath, outputPath, "Package");
                         break;
-                    }
 
-                    // ----------------------------------------------------
-                    // JSON → VIPB
-                    // ----------------------------------------------------
                     case "json2vipb":
-                    {
-                        var json = File.ReadAllText(inFile, Encoding.UTF8);
-                        var xml  = JsonConvert.DeserializeXmlNode(json, "Package", true);
-                        xml.Save(outFile);
+                        ConvertJsonToXml(inputPath, outputPath, "Package");
                         break;
-                    }
 
-                    // ----------------------------------------------------
-                    // JSON → VIPB with patch
-                    // ----------------------------------------------------
-                    case "patch2vipb":
-                    {
-                        if (args.Length < 4)
-                        {
-                            Console.Error.WriteLine("patch2vipb mode requires a patch YAML file.");
-                            return 1;
-                        }
-                        var patchFile = args[3];
-
-                        var json = File.ReadAllText(inFile, Encoding.UTF8);
-                        var root = Newtonsoft.Json.Linq.JObject.Parse(json);
-
-                        var patchYaml = File.ReadAllText(patchFile, Encoding.UTF8);
-                        PatchApplier.ApplyYamlPatch(root, patchYaml);
-
-                        var patchedDoc = JsonConvert.DeserializeXmlNode(root.ToString(), "Package", true);
-                        patchedDoc.Save(outFile);
+                    case "lvproj2json":
+                        ConvertXmlToJson(inputPath, outputPath, "Project");
                         break;
-                    }
+
+                    case "json2lvproj":
+                        ConvertJsonToXml(inputPath, outputPath, "Project");
+                        break;
+
+                    case "buildspec2json":
+                        ConvertBuildSpecToJson(inputPath, outputPath);
+                        break;
+
+                    case "json2buildspec":
+                        ConvertJsonToBuildSpec(inputPath, outputPath);
+                        break;
 
                     default:
-                        Console.Error.WriteLine($"Unknown mode: {mode}");
+                        Console.Error.WriteLine($"ERROR: Unknown mode '{mode}'");
                         return 1;
                 }
 
+                Console.WriteLine($"Successfully executed {mode}");
                 return 0;
             }
             catch (Exception ex)
             {
                 Console.Error.WriteLine($"ERROR: {ex.Message}");
-                Console.Error.WriteLine(ex);
                 return 1;
+            }
+        }
+
+        // General XML → JSON conversion
+        static void ConvertXmlToJson(string xmlPath, string jsonPath, string rootElementName)
+        {
+            if (!File.Exists(xmlPath))
+                throw new FileNotFoundException($"Input file not found: {xmlPath}");
+
+            var doc = new XmlDocument { PreserveWhitespace = true };
+            doc.Load(xmlPath);
+
+            if (doc.DocumentElement == null || doc.DocumentElement.Name != rootElementName)
+                throw new InvalidOperationException($"Invalid root element. Expected '{rootElementName}'.");
+
+            string json = JsonConvert.SerializeXmlNode(doc, Newtonsoft.Json.Formatting.Indented, true);
+            File.WriteAllText(jsonPath, json);
+        }
+
+        // General JSON → XML conversion
+        static void ConvertJsonToXml(string jsonPath, string xmlPath, string rootElementName)
+        {
+            if (!File.Exists(jsonPath))
+                throw new FileNotFoundException($"Input file not found: {jsonPath}");
+
+            string json = File.ReadAllText(jsonPath);
+            var xmlDoc = JsonConvert.DeserializeXmlNode(json, rootElementName);
+
+            using var writer = XmlWriter.Create(xmlPath, new XmlWriterSettings { Indent = true });
+            xmlDoc.Save(writer);
+        }
+
+        // Unified buildspec → JSON (VIPB or LVPROJ based on extension)
+        static void ConvertBuildSpecToJson(string inputPath, string outputPath)
+        {
+            var ext = Path.GetExtension(inputPath).ToLower();
+            if (ext == ".vipb")
+            {
+                ConvertXmlToJson(inputPath, outputPath, "Package");
+            }
+            else if (ext == ".lvproj")
+            {
+                ConvertXmlToJson(inputPath, outputPath, "Project");
+            }
+            else
+            {
+                throw new InvalidOperationException("Unsupported input file type for buildspec2json. Must be .vipb or .lvproj");
+            }
+        }
+
+        // Unified JSON → buildspec (VIPB or LVPROJ based on extension)
+        static void ConvertJsonToBuildSpec(string inputPath, string outputPath)
+        {
+            var ext = Path.GetExtension(outputPath).ToLower();
+            if (ext == ".vipb")
+            {
+                ConvertJsonToXml(inputPath, outputPath, "Package");
+            }
+            else if (ext == ".lvproj")
+            {
+                ConvertJsonToXml(inputPath, outputPath, "Project");
+            }
+            else
+            {
+                throw new InvalidOperationException("Unsupported output file type for json2buildspec. Must be .vipb or .lvproj");
             }
         }
     }
