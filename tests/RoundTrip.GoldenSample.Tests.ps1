@@ -10,13 +10,38 @@ Describe "Golden Sample Full Coverage — $SourceFile" {
 
         function Get-LeafPaths([object]$obj, [string]$prefix='') {
             $list = New-Object System.Collections.Generic.List[string]
-            if ($obj -is [pscustomobject]) {
-                foreach ($n in $obj.PSObject.Properties.Name) {
-                    $list.AddRange((Get-LeafPaths $obj.$n, ($prefix ? "$prefix.$n" : $n)))
+            # Use an explicit stack to avoid deep recursion on nested structures
+            $stack = [System.Collections.Stack]::new()
+            $stack.Push([PSCustomObject]@{ Node = $obj; Path = $prefix })
+            while ($stack.Count -gt 0) {
+                $frame = $stack.Pop()
+                $currentObj = $frame.Node
+                $currentPath = $frame.Path
+                if ($currentObj -is [pscustomobject]) {
+                    $props = $currentObj.PSObject.Properties.Name
+                    for ($i = $props.Count - 1; $i -ge 0; $i--) {
+                        $name = $props[$i]
+                        $value = $currentObj.$name
+                        $stack.Push([PSCustomObject]@{ Node = $value; Path = ($currentPath ? "$currentPath.$name" : $name) })
+                    }
+                } elseif ($currentObj -is [System.Collections.IDictionary]) {
+                    $keys = @($currentObj.Keys)
+                    for ($i = $keys.Count - 1; $i -ge 0; $i--) {
+                        $key = $keys[$i]
+                        $value = $currentObj[$key]
+                        $stack.Push([PSCustomObject]@{ Node = $value; Path = ($currentPath ? "$currentPath.$key" : $key) })
+                    }
+                } elseif ($currentObj -is [System.Collections.IEnumerable] -and $currentObj -isnot [string]) {
+                    $arr = @($currentObj)
+                    for ($i = $arr.Count - 1; $i -ge 0; $i--) {
+                        $stack.Push([PSCustomObject]@{ Node = $arr[$i]; Path = "$currentPath[$i]" })
+                    }
+                } else {
+                    if ($currentPath) {
+                        $list.Add($currentPath)
+                    }
                 }
-            } elseif ($obj -is [System.Collections.IEnumerable] -and $obj -isnot [string]) {
-                $i = 0; foreach ($v in $obj) { $list.AddRange((Get-LeafPaths $v, "$prefix[$i]")); $i++ }
-            } else { if ($prefix) { $list.Add($prefix) } }
+            }
             return $list
         }
 
