@@ -3,35 +3,90 @@ using System.IO;
 using System.Xml;
 using Newtonsoft.Json;
 
-namespace VipbJsonTool
+namespace LvprojJsonTool
 {
     class Program
     {
         static int Main(string[] args)
         {
-            if (args.Length < 3)
+            // Show usage if no arguments provided
+            if (args.Length == 0)
             {
-                Console.Error.WriteLine("Usage: VipbJsonTool <mode> <input> <output>");
+                Console.Error.WriteLine("Usage: LvprojJsonTool <mode> --input <file> --output <file>");
+                Console.Error.WriteLine("Run with --help for more information on modes and options.");
+                return 1;
+            }
+            // Show detailed help if requested
+            if (args[0] == "--help" || args[0] == "-h")
+            {
+                Console.WriteLine("Usage: LvprojJsonTool <mode> --input <file> --output <file>");
+                Console.WriteLine();
+                Console.WriteLine("Modes:");
+                Console.WriteLine("  lvproj2json   Convert a LabVIEW .lvproj (XML) file to JSON format.");
+                Console.WriteLine("  json2lvproj   Convert a LabVIEW project JSON file back to .lvproj (XML).");
+                return 0;
+            }
+
+            string mode = null;
+            string inputPath = null;
+            string outputPath = null;
+
+            // Parse arguments for mode, input and output
+            for (int i = 0; i < args.Length; i++)
+            {
+                string arg = args[i];
+                if (arg == "--input" || arg == "-i")
+                {
+                    if (i == args.Length - 1)
+                    {
+                        Console.Error.WriteLine("ERROR: Missing value for --input option");
+                        return 1;
+                    }
+                    inputPath = args[++i];
+                }
+                else if (arg == "--output" || arg == "-o")
+                {
+                    if (i == args.Length - 1)
+                    {
+                        Console.Error.WriteLine("ERROR: Missing value for --output option");
+                        return 1;
+                    }
+                    outputPath = args[++i];
+                }
+                else if (!arg.StartsWith("-") && mode == null)
+                {
+                    mode = arg.ToLowerInvariant();
+                }
+                else
+                {
+                    Console.Error.WriteLine($"ERROR: Unknown argument '{arg}'");
+                    return 1;
+                }
+            }
+
+            if (string.IsNullOrEmpty(mode) || string.IsNullOrEmpty(inputPath) || string.IsNullOrEmpty(outputPath))
+            {
+                Console.Error.WriteLine("Usage: LvprojJsonTool <mode> --input <file> --output <file>");
                 return 1;
             }
 
-            string mode       = args[0].ToLower();
-            string inputPath  = args[1];
-            string outputPath = args[2];
-
             // Ensure the output directory exists
-            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+            string outputDir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(outputDir))
+            {
+                Directory.CreateDirectory(outputDir);
+            }
 
             try
             {
                 switch (mode)
                 {
-                    case "vipb2json":      ConvertXmlToJson(inputPath, outputPath, "Package"); break;
-                    case "json2vipb":      ConvertJsonToXml(inputPath, outputPath, "Package"); break;
-                    case "lvproj2json":    ConvertXmlToJson(inputPath, outputPath, "Project"); break;
-                    case "json2lvproj":    ConvertJsonToXml(inputPath, outputPath, "Project"); break;
-                    case "buildspec2json": ConvertBuildSpecToJson(inputPath, outputPath);       break;
-                    case "json2buildspec": ConvertJsonToBuildSpec(inputPath, outputPath);       break;
+                    case "lvproj2json":
+                        ConvertXmlToJson(inputPath, outputPath, "Project");
+                        break;
+                    case "json2lvproj":
+                        ConvertJsonToXml(inputPath, outputPath, "Project");
+                        break;
                     default:
                         Console.Error.WriteLine($"ERROR: Unknown mode '{mode}'");
                         return 1;
@@ -47,10 +102,7 @@ namespace VipbJsonTool
             }
         }
 
-        //----------------------------------------------------------------------
-        // XML ➜ JSON
-        //----------------------------------------------------------------------
-
+        // Convert XML (.lvproj) to JSON
         private static void ConvertXmlToJson(string xmlPath, string jsonPath, string rootElementName)
         {
             if (!File.Exists(xmlPath))
@@ -62,52 +114,28 @@ namespace VipbJsonTool
             if (doc.DocumentElement?.Name != rootElementName)
                 throw new InvalidOperationException($"Invalid root element. Expected '{rootElementName}'.");
 
-            // Use fully-qualified enum to avoid ambiguity
             string json = JsonConvert.SerializeXmlNode(
                 doc,
-                Newtonsoft.Json.Formatting.Indented,  // specify the JSON Formatting
+                Newtonsoft.Json.Formatting.Indented,
                 /* omitRootObject: */ false);
+
             File.WriteAllText(jsonPath, json);
         }
 
-        //----------------------------------------------------------------------
-        // JSON ➜ XML
-        //----------------------------------------------------------------------
-
+        // Convert JSON to XML (.lvproj)
         private static void ConvertJsonToXml(string jsonPath, string xmlPath, string rootElementName)
         {
             if (!File.Exists(jsonPath))
                 throw new FileNotFoundException($"Input file not found: {jsonPath}");
 
-            string json = File.ReadAllText(jsonPath);
-
-            var xmlDoc = JsonConvert.DeserializeXmlNode(json)!;
+            string jsonContent = File.ReadAllText(jsonPath);
+            var xmlDoc = JsonConvert.DeserializeXmlNode(jsonContent);
 
             if (xmlDoc.DocumentElement?.Name != rootElementName)
                 throw new InvalidOperationException($"Invalid root element. Expected '{rootElementName}'.");
 
             using var writer = XmlWriter.Create(xmlPath, new XmlWriterSettings { Indent = true });
             xmlDoc.Save(writer);
-        }
-
-        //----------------------------------------------------------------------
-        // Build‑spec helpers (unchanged)
-        //----------------------------------------------------------------------
-
-        private static void ConvertBuildSpecToJson(string inputPath, string outputPath)
-        {
-            string ext = Path.GetExtension(inputPath).ToLowerInvariant();
-            if (ext == ".vipb")      ConvertXmlToJson(inputPath, outputPath, "Package");
-            else if (ext == ".lvproj") ConvertXmlToJson(inputPath, outputPath, "Project");
-            else throw new InvalidOperationException("Unsupported input file type for buildspec2json. Must be .vipb or .lvproj");
-        }
-
-        private static void ConvertJsonToBuildSpec(string inputPath, string outputPath)
-        {
-            string ext = Path.GetExtension(outputPath).ToLowerInvariant();
-            if (ext == ".vipb")      ConvertJsonToXml(inputPath, outputPath, "Package");
-            else if (ext == ".lvproj") ConvertJsonToXml(inputPath, outputPath, "Project");
-            else throw new InvalidOperationException("Unsupported output file type for json2buildspec. Must be .vipb or .lvproj");
         }
     }
 }
