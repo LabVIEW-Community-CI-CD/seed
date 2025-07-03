@@ -3,16 +3,17 @@ $RepoRoot = Split-Path $PSScriptRoot -Parent
 Describe "CLI wrapper scripts basic behavior" {
     $cliCommands = @("vipb2json", "json2vipb", "lvproj2json", "json2lvproj", "buildspec2json", "json2buildspec")
     foreach ($cmd in $cliCommands) {
-        It "exists and is executable: $cmd" {
-            (Get-Command $cmd -ErrorAction SilentlyContinue) | Should -Not -Be $null -Because "$cmd not found in PATH"
+        $tool = $cmd
+        It "exists and is executable: $tool" {
+            (Get-Command $tool -ErrorAction SilentlyContinue) | Should -Not -Be $null -Because "$tool not found in PATH"
         }
-        It "displays help for '$cmd' when --help is given" {
-            $output = & $cmd --help 2>&1
+        It "displays help for '$tool' when --help is given" {
+            $output = & $tool --help 2>&1
             $LASTEXITCODE | Should -Be 0
             $output | Should -Match "\bUsage\b"
         }
-        It "exits with error on unknown flag for '$cmd'" {
-            $output = & $cmd --unknownFlag 2>&1
+        It "exits with error on unknown flag for '$tool'" {
+            $output = & $tool --unknownFlag 2>&1
             $LASTEXITCODE | Should -Not -Be 0
             $output | Should -Match "Unknown"
         }

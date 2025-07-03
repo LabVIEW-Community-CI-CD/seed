@@ -29,11 +29,14 @@ Describe "VIPB golden sample round-trip" {
     }
     else {
         foreach ($file in $vipbSamples) {
-            It "round-trips $($file.Name) without JSON differences" {
-                $sampleName   = [System.IO.Path]::GetFileNameWithoutExtension($file.Name)
-                $sampleExt    = [System.IO.Path]::GetExtension($file.Name)
+            $thisFile = $file
+            It "round-trips $($thisFile.Name) without JSON differences" {
+                $sampleName   = [System.IO.Path]::GetFileNameWithoutExtension($thisFile.Name)
+                $sampleExt    = [System.IO.Path]::GetExtension($thisFile.Name)
                 $workDir      = Join-Path $script:RoundTripOutDir "$($sampleName)$($sampleExt)"
-                New-Item $workDir -Type Directory | Out-Null
+                if (-not (Test-Path $workDir)) {
+                    New-Item $workDir -Type Directory | Out-Null
+                }
 
                 # Define paths for intermediate files
                 $origJsonPath      = Join-Path $workDir "$sampleName.original.json"
@@ -42,7 +45,7 @@ Describe "VIPB golden sample round-trip" {
 
                 try {
                     # 1. Convert original .vipb to JSON
-                    & vipb2json --input "$($file.FullName)" --output "$origJsonPath"
+                    & vipb2json --input "$($thisFile.FullName)" --output "$origJsonPath"
                     if ($LASTEXITCODE -ne 0) {
                         throw "vipb2json failed (exit code $LASTEXITCODE)"
                     }
@@ -69,7 +72,7 @@ Describe "VIPB golden sample round-trip" {
                     }
                 }
                 catch {
-                    Write-Host "ERROR: Round-trip conversion failed for $($file.Name) - $($_.Exception.Message)"
+                    Write-Host "ERROR: Round-trip conversion failed for $($thisFile.Name) - $($_.Exception.Message)"
                     throw  # Fail this test case
                 }
 
@@ -93,7 +96,7 @@ Describe "VIPB golden sample round-trip" {
                         Write-Host "JSON files have different line counts: $($origLines.Count) vs $($roundLines.Count)"
                     }
                     # Fail the test with a descriptive message
-                    $false | Should -BeTrue -Because "Round-trip JSON output differs from original for $($file.Name)."
+                    $false | Should -BeTrue -Because "Round-trip JSON output differs from original for $($thisFile.Name)."
                 }
                 else {
                     # Optionally assert success explicitly
@@ -115,11 +118,14 @@ Describe "LVPROJ golden sample round-trip" {
     }
     else {
         foreach ($file in $lvprojSamples) {
-            It "round-trips $($file.Name) without JSON differences" {
-                $sampleName     = [System.IO.Path]::GetFileNameWithoutExtension($file.Name)
-                $sampleExt      = [System.IO.Path]::GetExtension($file.Name)
+            $thisFile = $file
+            It "round-trips $($thisFile.Name) without JSON differences" {
+                $sampleName     = [System.IO.Path]::GetFileNameWithoutExtension($thisFile.Name)
+                $sampleExt      = [System.IO.Path]::GetExtension($thisFile.Name)
                 $workDir        = Join-Path $script:RoundTripOutDir "$($sampleName)$($sampleExt)"
-                New-Item $workDir -Type Directory | Out-Null
+                if (-not (Test-Path $workDir)) {
+                    New-Item $workDir -Type Directory | Out-Null
+                }
 
                 # Define paths for intermediate files
                 $origJsonPath        = Join-Path $workDir "$sampleName.original.json"
@@ -128,7 +134,7 @@ Describe "LVPROJ golden sample round-trip" {
 
                 try {
                     # 1. Convert original .lvproj to JSON
-                    & lvproj2json --input "$($file.FullName)" --output "$origJsonPath"
+                    & lvproj2json --input "$($thisFile.FullName)" --output "$origJsonPath"
                     if ($LASTEXITCODE -ne 0) {
                         throw "lvproj2json failed (exit code $LASTEXITCODE)"
                     }
@@ -155,7 +161,7 @@ Describe "LVPROJ golden sample round-trip" {
                     }
                 }
                 catch {
-                    Write-Host "ERROR: Round-trip conversion failed for $($file.Name) - $($_.Exception.Message)"
+                    Write-Host "ERROR: Round-trip conversion failed for $($thisFile.Name) - $($_.Exception.Message)"
                     throw
                 }
 
@@ -177,7 +183,7 @@ Describe "LVPROJ golden sample round-trip" {
                     if ($origLines.Count -ne $roundLines.Count) {
                         Write-Host "JSON files have different line counts: $($origLines.Count) vs $($roundLines.Count)"
                     }
-                    $false | Should -BeTrue -Because "Round-trip JSON output differs from original for $($file.Name)."
+                    $false | Should -BeTrue -Because "Round-trip JSON output differs from original for $($thisFile.Name)."
                 }
                 else {
                     $true | Should -BeTrue
