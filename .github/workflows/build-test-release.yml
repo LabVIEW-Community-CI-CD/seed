@@ -49,16 +49,20 @@ jobs:
       - name: Publish CLI (LvprojJsonTool, linux-x64 single-file)
         run: dotnet publish src/LvprojJsonTool -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -p:TreatWarningsAsErrors=false --no-restore --no-build -o publish/linux-x64
 
-      - name: Ensure bin/ directory exists and is writeable
+      # ─── ensure bin/ exists and is writable ──────────────────────────────
+      - name: Prepare bin/ directory
         run: |
-          mkdir -p bin
-          chmod 777 bin
+          mkdir -p bin                       # create if missing
+          chmod u+rwx bin                    # ensure current user can write
+          rm -f bin/VipbJsonTool bin/LvprojJsonTool  # delete stale copies if any
 
-      - name: Copy published VipbJsonTool to bin
-        run: Copy-Item -Force publish/linux-x64/VipbJsonTool bin/
+      # ─── copy VipbJsonTool ────────────────────────────────────────────────
+      - name: Copy VipbJsonTool binary to bin/
+        run: Copy-Item publish/linux-x64/VipbJsonTool bin/ -Force
 
+      # ─── copy LvprojJsonTool ──────────────────────────────────────────────
       - name: Copy LvprojJsonTool binary to bin/
-        run: Copy-Item -Force publish/linux-x64/LvprojJsonTool bin/
+        run: Copy-Item publish/linux-x64/LvprojJsonTool bin/ -Force
 
       # --- Pester Test & Coverage ---
       - name: Install Pester
