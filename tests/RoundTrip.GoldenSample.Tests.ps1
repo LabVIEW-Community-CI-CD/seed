@@ -21,12 +21,12 @@ function Flatten-Object {
             }
         }
         elseif ($o -is [System.Collections.IEnumerable] -and $o -isnot [string]) {
-            return      # skip arrays for YAML master file
+            return      # skip arrays for master file
         }
         else {
             if ($p) {
-                $key              = ConvertTo-SnakeCase $p.TrimEnd('.')
-                $out[$key]        = if ($null -eq $o) { '' } else { $o }
+                $key       = ConvertTo-SnakeCase $p.TrimEnd('.')
+                $out[$key] = if ($null -eq $o) { '' } else { $o }
             }
         }
     }
@@ -34,26 +34,30 @@ function Flatten-Object {
     return $out
 }
 
-#####  paths ###################################################################
-$vipbFile  = "tests/Samples/seed.vipb"
-$lvprojFile= "tests/Samples/seed.lvproj"
-$release   = "release"
-$vipbYaml  = Join-Path $release "seed-vipb.yaml"
-$lvprojYaml= Join-Path $release "seed-lvproj.yaml"
-
 #####  pester ##################################################################
 Describe "Golden‑sample alias discovery" {
 
+    # -------------- shared variables (script‑scope) --------------------------
     BeforeAll {
-        if (Test-Path $release) { Remove-Item $release -Recurse -Force }
-        New-Item $release -ItemType Directory -Force | Out-Null
+        # file locations
+        $script:vipbFile   = "tests/Samples/seed.vipb"
+        $script:lvprojFile = "tests/Samples/seed.lvproj"
+
+        # release folder + outputs
+        $script:release     = "release"
+        $script:vipbYaml    = Join-Path $script:release "seed-vipb.yaml"
+        $script:lvprojYaml  = Join-Path $script:release "seed-lvproj.yaml"
+
+        if (Test-Path $script:release) { Remove-Item $script:release -Recurse -Force }
+        New-Item $script:release -ItemType Directory -Force | Out-Null
     }
 
     It "extracts aliases & values from seed.vipb" {
         try {
-            $vipbJson = Join-Path $release "seed.vipb.json"
+            $vipbJson = Join-Path $script:release "seed.vipb.json"
             & dotnet run --project src/VipbJsonTool/VipbJsonTool.csproj `
-                         --no-build -- buildspec2json $vipbFile $vipbJson
+                         --no-build -- buildspec2json `
+                         $script:vipbFile $vipbJson
             if ($LASTEXITCODE) { throw "conversion failed (exit $LASTEXITCODE)" }
 
             $jObj      = Get-Content $vipbJson -Raw | ConvertFrom-Json
@@ -64,23 +68,24 @@ Describe "Golden‑sample alias discovery" {
                 if ([string]::IsNullOrWhiteSpace("$v")) { "${alias}:" }
                 else                                    { "${alias}: $v" }
             }
-            Set-Content $vipbYaml $yamlLines -Encoding UTF8
+            Set-Content $script:vipbYaml $yamlLines -Encoding UTF8
         }
         catch {
-            Write-Host "Error extracting patchable fields from ${vipbFile}: $($_.Exception.Message)"
+            Write-Host "Error extracting patchable fields from ${script:vipbFile}: $($_.Exception.Message)"
             Write-Host "StackTrace:`n$($_.Exception.StackTrace)"
             throw
         }
 
-        (Test-Path $vipbYaml)                | Should -BeTrue
-        (Get-Content $vipbYaml).Count        | Should -BeGreaterThan 0
+        (Test-Path $script:vipbYaml)           | Should -BeTrue
+        (Get-Content $script:vipbYaml).Count   | Should -BeGreaterThan 0
     }
 
     It "extracts aliases & values from seed.lvproj" {
         try {
-            $lvprojJson = Join-Path $release "seed.lvproj.json"
+            $lvprojJson = Join-Path $script:release "seed.lvproj.json"
             & dotnet run --project src/VipbJsonTool/VipbJsonTool.csproj `
-                         --no-build -- buildspec2json $lvprojFile $lvprojJson
+                         --no-build -- buildspec2json `
+                         $script:lvprojFile $lvprojJson
             if ($LASTEXITCODE) { throw "conversion failed (exit $LASTEXITCODE)" }
 
             $jObj      = Get-Content $lvprojJson -Raw | ConvertFrom-Json
@@ -91,15 +96,15 @@ Describe "Golden‑sample alias discovery" {
                 if ([string]::IsNullOrWhiteSpace("$v")) { "${alias}:" }
                 else                                    { "${alias}: $v" }
             }
-            Set-Content $lvprojYaml $yamlLines -Encoding UTF8
+            Set-Content $script:lvprojYaml $yamlLines -Encoding UTF8
         }
         catch {
-            Write-Host "Error extracting patchable fields from ${lvprojFile}: $($_.Exception.Message)"
+            Write-Host "Error extracting patchable fields from ${script:lvprojFile}: $($_.Exception.Message)"
             Write-Host "StackTrace:`n$($_.Exception.StackTrace)"
             throw
         }
 
-        (Test-Path $lvprojYaml)              | Should -BeTrue
-        (Get-Content $lvprojYaml).Count      | Should -BeGreaterThan 0
+        (Test-Path $script:lvprojYaml)         | Should -BeTrue
+        (Get-Content $script:lvprojYaml).Count | Should -BeGreaterThan 0
     }
 }
