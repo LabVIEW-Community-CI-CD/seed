@@ -31,7 +31,8 @@ Describe "VIPB golden sample round-trip" {
         foreach ($file in $vipbSamples) {
             It "round-trips $($file.Name) without JSON differences" {
                 $sampleName   = [System.IO.Path]::GetFileNameWithoutExtension($file.Name)
-                $workDir      = Join-Path $script:RoundTripOutDir $sampleName
+                $sampleExt    = [System.IO.Path]::GetExtension($file.Name)
+                $workDir      = Join-Path $script:RoundTripOutDir "$($sampleName)$($sampleExt)"
                 New-Item $workDir -Type Directory | Out-Null
 
                 # Define paths for intermediate files
@@ -116,7 +117,8 @@ Describe "LVPROJ golden sample round-trip" {
         foreach ($file in $lvprojSamples) {
             It "round-trips $($file.Name) without JSON differences" {
                 $sampleName     = [System.IO.Path]::GetFileNameWithoutExtension($file.Name)
-                $workDir        = Join-Path $script:RoundTripOutDir $sampleName
+                $sampleExt      = [System.IO.Path]::GetExtension($file.Name)
+                $workDir        = Join-Path $script:RoundTripOutDir "$($sampleName)$($sampleExt)"
                 New-Item $workDir -Type Directory | Out-Null
 
                 # Define paths for intermediate files
