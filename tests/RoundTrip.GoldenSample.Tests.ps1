@@ -56,7 +56,7 @@ Describe "Golden‑sample alias discovery" {
         try {
             $vipbJson = Join-Path $script:release "seed.vipb.json"
             & dotnet run --project src/VipbJsonTool/VipbJsonTool.csproj `
-                         --no-build -- buildspec2json `
+                         -c Release -- buildspec2json `
                          $script:vipbFile $vipbJson
             if ($LASTEXITCODE) { throw "conversion failed (exit $LASTEXITCODE)" }
 
@@ -84,7 +84,7 @@ Describe "Golden‑sample alias discovery" {
         try {
             $lvprojJson = Join-Path $script:release "seed.lvproj.json"
             & dotnet run --project src/VipbJsonTool/VipbJsonTool.csproj `
-                         --no-build -- buildspec2json `
+                         -c Release -- buildspec2json `
                          $script:lvprojFile $lvprojJson
             if ($LASTEXITCODE) { throw "conversion failed (exit $LASTEXITCODE)" }
 
