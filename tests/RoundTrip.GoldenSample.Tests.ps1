@@ -1,132 +1,105 @@
-# tests/RoundTrip.GoldenSample.Tests.ps1
+# ──────────────────────────────────────────────────────────────────────────────
+# RoundTrip.GoldenSample.Tests.ps1  ▶  self‑patching alias discovery
+# ──────────────────────────────────────────────────────────────────────────────
+param()
 
-# Function to convert CamelCase/PascalCase or dot notation into snake_case for alias keys
+#####  helper functions ########################################################
 function ConvertTo-SnakeCase {
     param([string]$Name)
-    # Replace dot separators with underscore, then insert underscore between lowercase-to-uppercase transitions, finally lowercase everything
-    $Name = $Name -replace '\.', '_'
-    $Name = $Name -replace '([0-9a-z])([A-Z])', '$1_$2'
-    return $Name.ToLower()
+    $Name = $Name -replace '\.', '_'                    # dots → underscores
+    $Name = $Name -replace '([0-9a-z])([A-Z])', '$1_$2' # aB → a_B
+    $Name.ToLower()
 }
 
-# Recursive function to flatten all properties of an object into alias-value pairs
 function Flatten-Object {
     param($Obj)
-    $result = [ordered]@{}
-    function Flatten-Internal($obj, $prefix="") {
-        # Skip arrays or collections entirely (not considered patchable fields for YAML output)
-        if ($obj -is [System.Collections.IEnumerable] -and -not ($obj -is [string])) {
-            return
-        }
-        if ($obj -is [PSCustomObject]) {
-            # Iterate through each property of the object
-            foreach ($prop in $obj.PSObject.Properties) {
-                Flatten-Internal -obj $prop.Value -prefix ($prefix + $prop.Name + ".")
+    $out = [ordered]@{}
+    function Recurse ($o,$p='') {
+        if ($o -is [pscustomobject]) {
+            foreach ($prop in $o.psobject.Properties) {
+                Recurse $prop.Value "$p$($prop.Name)."
             }
+        }
+        elseif ($o -is [System.Collections.IEnumerable] -and $o -isnot [string]) {
+            return      # skip arrays for YAML master file
         }
         else {
-            # Base case: $obj is a primitive value (string, number, bool, or null)
-            $key = $prefix.TrimEnd(".")  # remove trailing dot from accumulated prefix
-            if ([string]::IsNullOrEmpty($key)) { return }
-            # Convert to alias (snake_case) and assign value (use empty string for null)
-            $result[(ConvertTo-SnakeCase $key)] = if ($obj -eq $null) { "" } else { $obj }
+            if ($p) {
+                $key              = ConvertTo-SnakeCase $p.TrimEnd('.')
+                $out[$key]        = if ($null -eq $o) { '' } else { $o }
+            }
         }
     }
-    Flatten-Internal -obj $Obj -prefix ""
-    return $result
+    Recurse $Obj
+    return $out
 }
 
-# Define paths for canonical seed input files and output YAMLs
-$vipbFile    = "tests/Samples/seed.vipb"
-$lvprojFile  = "tests/Samples/seed.lvproj"
-$releaseDir  = "release"
-$vipbYamlOut = Join-Path $releaseDir "seed-vipb.yaml"
-$lvprojYamlOut = Join-Path $releaseDir "seed-lvproj.yaml"
+#####  paths ###################################################################
+$vipbFile  = "tests/Samples/seed.vipb"
+$lvprojFile= "tests/Samples/seed.lvproj"
+$release   = "release"
+$vipbYaml  = Join-Path $release "seed-vipb.yaml"
+$lvprojYaml= Join-Path $release "seed-lvproj.yaml"
 
-Describe "RoundTrip Golden Sample YAML Extraction" {
+#####  pester ##################################################################
+Describe "Golden‑sample alias discovery" {
+
     BeforeAll {
-        # Ensure a clean output directory for release artifacts
-        if (Test-Path $releaseDir) {
-            Remove-Item -Recurse -Force $releaseDir
-        }
-        New-Item -Type Directory -Path $releaseDir -Force | Out-Null
+        if (Test-Path $release) { Remove-Item $release -Recurse -Force }
+        New-Item $release -ItemType Directory -Force | Out-Null
     }
 
-    It "should generate seed-vipb.yaml from the seed.vipb file" {
+    It "extracts aliases & values from seed.vipb" {
         try {
-            # Convert the VIPB file to JSON using the CLI tool
-            $vipbJsonPath = Join-Path $releaseDir "seed.vipb.json"
-            & dotnet run --project src/VipbJsonTool/VipbJsonTool.csproj --no-build -- buildspec2json $vipbFile $vipbJsonPath
-            if ($LastExitCode -ne 0) {
-                throw "CLI conversion vipb->json failed with exit code $LastExitCode"
-            }
-            # Load and parse the JSON output
-            $vipbJson = Get-Content -Path $vipbJsonPath -Raw | ConvertFrom-Json
-            # Flatten all patchable fields (aliases) and their values into a hashtable
-            $flatVipb = Flatten-Object -Obj $vipbJson
-            # Build YAML content lines from the flattened key-value pairs
-            $yamlLines = foreach ($alias in $flatVipb.Keys) {
-                $val = $flatVipb[$alias]
-                if ($val -eq $null -or ([string]::IsNullOrWhiteSpace([string]$val))) {
-                    # Include key with empty value
-                    "$alias:"
-                }
-                else {
-                    "$alias: $val"
-                }
-            }
-            # Write the YAML content to the output file
-            Set-Content -Path $vipbYamlOut -Value $yamlLines -Encoding UTF8
-        }
-        catch {
-            # On failure, output detailed debug information (file path, error message, and stack trace)
-            Write-Host "Error extracting patchable fields from $vipbFile: $($_.Exception.Message)"
-            if ($_.InvocationInfo) {
-                Write-Host "Failure at $($_.InvocationInfo.ScriptName): line $($_.InvocationInfo.ScriptLineNumber)"
-            }
-            Write-Host "Stack Trace:`n$($_.Exception.StackTrace)"
-            throw  # Rethrow to mark this test as failed
-        }
-        # Validate that the YAML file was created and is not empty
-        (Test-Path $vipbYamlOut) | Should -BeTrue -Because "seed-vipb.yaml was not generated."
-        (Get-Content $vipbYamlOut | Measure-Object -Line).Lines | Should -BeGreaterThan 0 -Because "seed-vipb.yaml is empty."
-    }
+            $vipbJson = Join-Path $release "seed.vipb.json"
+            & dotnet run --project src/VipbJsonTool/VipbJsonTool.csproj `
+                         --no-build -- buildspec2json $vipbFile $vipbJson
+            if ($LASTEXITCODE) { throw "conversion failed (exit $LASTEXITCODE)" }
 
-    It "should generate seed-lvproj.yaml from the seed.lvproj file" {
-        try {
-            # Convert the LVPROJ file to JSON using the CLI tool
-            $lvprojJsonPath = Join-Path $releaseDir "seed.lvproj.json"
-            & dotnet run --project src/VipbJsonTool/VipbJsonTool.csproj --no-build -- buildspec2json $lvprojFile $lvprojJsonPath
-            if ($LastExitCode -ne 0) {
-                throw "CLI conversion lvproj->json failed with exit code $LastExitCode"
+            $jObj      = Get-Content $vipbJson -Raw | ConvertFrom-Json
+            $flattened = Flatten-Object $jObj
+
+            $yamlLines = foreach ($alias in $flattened.Keys) {
+                $v = $flattened[$alias]
+                if ([string]::IsNullOrWhiteSpace("$v")) { "${alias}:" }
+                else                                    { "${alias}: $v" }
             }
-            # Load and parse the JSON output
-            $lvprojJson = Get-Content -Path $lvprojJsonPath -Raw | ConvertFrom-Json
-            # Flatten all patchable fields (aliases) and their values
-            $flatLvproj = Flatten-Object -Obj $lvprojJson
-            # Build YAML content lines
-            $yamlLines2 = foreach ($alias in $flatLvproj.Keys) {
-                $val = $flatLvproj[$alias]
-                if ($val -eq $null -or ([string]::IsNullOrWhiteSpace([string]$val))) {
-                    "$alias:"
-                }
-                else {
-                    "$alias: $val"
-                }
-            }
-            Set-Content -Path $lvprojYamlOut -Value $yamlLines2 -Encoding UTF8
+            Set-Content $vipbYaml $yamlLines -Encoding UTF8
         }
         catch {
-            # Debug output on failure for LVPROJ extraction
-            Write-Host "Error extracting patchable fields from $lvprojFile: $($_.Exception.Message)"
-            if ($_.InvocationInfo) {
-                Write-Host "Failure at $($_.InvocationInfo.ScriptName): line $($_.InvocationInfo.ScriptLineNumber)"
-            }
-            Write-Host "Stack Trace:`n$($_.Exception.StackTrace)"
+            Write-Host "Error extracting patchable fields from ${vipbFile}: $($_.Exception.Message)"
+            Write-Host "StackTrace:`n$($_.Exception.StackTrace)"
             throw
         }
-        # Validate YAML file creation and content
-        (Test-Path $lvprojYamlOut) | Should -BeTrue -Because "seed-lvproj.yaml was not generated."
-        (Get-Content $lvprojYamlOut | Measure-Object -Line).Lines | Should -BeGreaterThan 0 -Because "seed-lvproj.yaml is empty."
+
+        (Test-Path $vipbYaml)                | Should -BeTrue
+        (Get-Content $vipbYaml).Count        | Should -BeGreaterThan 0
+    }
+
+    It "extracts aliases & values from seed.lvproj" {
+        try {
+            $lvprojJson = Join-Path $release "seed.lvproj.json"
+            & dotnet run --project src/VipbJsonTool/VipbJsonTool.csproj `
+                         --no-build -- buildspec2json $lvprojFile $lvprojJson
+            if ($LASTEXITCODE) { throw "conversion failed (exit $LASTEXITCODE)" }
+
+            $jObj      = Get-Content $lvprojJson -Raw | ConvertFrom-Json
+            $flattened = Flatten-Object $jObj
+
+            $yamlLines = foreach ($alias in $flattened.Keys) {
+                $v = $flattened[$alias]
+                if ([string]::IsNullOrWhiteSpace("$v")) { "${alias}:" }
+                else                                    { "${alias}: $v" }
+            }
+            Set-Content $lvprojYaml $yamlLines -Encoding UTF8
+        }
+        catch {
+            Write-Host "Error extracting patchable fields from ${lvprojFile}: $($_.Exception.Message)"
+            Write-Host "StackTrace:`n$($_.Exception.StackTrace)"
+            throw
+        }
+
+        (Test-Path $lvprojYaml)              | Should -BeTrue
+        (Get-Content $lvprojYaml).Count      | Should -BeGreaterThan 0
     }
 }
