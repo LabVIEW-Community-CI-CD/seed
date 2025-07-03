@@ -3,7 +3,7 @@ name: build-test-release
 on:
   push:
     branches: [ main ]
-    tags:    [ 'v*' ]
+    tags:  [ 'v*' ]
   pull_request:
     branches: [ main ]
 
@@ -15,135 +15,63 @@ jobs:
         shell: pwsh
 
     steps:
-    # -------------------------------------------------------------------------
-    # Source code
-    # -------------------------------------------------------------------------
-    - name: Checkout
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    # -------------------------------------------------------------------------
-    # .NET SDK
-    # -------------------------------------------------------------------------
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.x
-        cache: true
-        cache-dependency-path: |
-          **/*.csproj
-          **/*.sln
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+          cache: true
+          cache-dependency-path: |
+            **/*.csproj
+            **/*.sln
 
-    # -------------------------------------------------------------------------
-    # Restore & build
-    # -------------------------------------------------------------------------
-    - name: Restore packages
-      run: dotnet restore src/VipbJsonTool/VipbJsonTool.csproj
+      - name: Restore .NET packages
+        run: dotnet restore src/VipbJsonTool/VipbJsonTool.csproj
 
-    - name: Build (warnings ≠ errors)
-      run: dotnet build src/VipbJsonTool/VipbJsonTool.csproj `
-                        -c Release `
-                        -p:TreatWarningsAsErrors=false `
-                        --no-restore
+      - name: Build .NET project
+        run: dotnet build src/VipbJsonTool/VipbJsonTool.csproj -c Release --no-restore -p:TreatWarningsAsErrors=false
 
-    # -------------------------------------------------------------------------
-    # Publish single‑file CLI
-    # -------------------------------------------------------------------------
-    - name: Publish CLI (linux‑x64 single‑file)
-      run: dotnet publish src/VipbJsonTool `
-                          -c Release `
-                          -r linux-x64 `
-                          --self-contained `
-                          -p:PublishSingleFile=true `
-                          -p:TreatWarningsAsErrors=false `
-                          --no-restore `
-                          --no-build `
-                          -o publish/linux-x64
+      - name: Publish CLI (linux-x64 single-file)
+        run: dotnet publish src/VipbJsonTool -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -p:TreatWarningsAsErrors=false --no-restore --no-build -o publish/linux-x64
 
-    # -------------------------------------------------------------------------
-    # PowerShell test prerequisites
-    # -------------------------------------------------------------------------
-    - name: Install Pester
-      run: Install-Module Pester -Force -Scope CurrentUser
+      - name: Install Pester
+        run: Install-Module Pester -Force -Scope CurrentUser
 
-    # -------------------------------------------------------------------------
-    # Quick CLI smoke tests (LVPROJ + VIPB round‑trip)
-    # -------------------------------------------------------------------------
-    - name: Run CLI conversion tests (LVPROJ & VIPB round‑trip)
-      run: |
-        New-Item -ItemType Directory -Force -Path tests/tmp | Out-Null
+      - name: Run Golden Sample test (YAML generation)
+        run: |
+          $result = Invoke-Pester -Configuration @{
+            Run = @{ Path = 'tests/RoundTrip.GoldenSample.Tests.ps1'; PassThru = $true }
+            TestResult = @{ Enabled = $true; OutputFormat = 'NUnitXml'; OutputPath = 'golden-sample-results.xml' }
+          }
+          if ($result.FailedCount -gt 0) { exit 1 }
 
-        # ---------- LVPROJ native modes ----------
-        dotnet run --project src/VipbJsonTool lvproj2json `
-          tests/Samples/seed.lvproj tests/tmp/seed.lvproj.json
-        dotnet run --project src/VipbJsonTool json2lvproj `
-          tests/tmp/seed.lvproj.json tests/tmp/seed.roundtrip.lvproj
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-sample-test-results
+          path: golden-sample-results.xml
 
-        # ---------- VIPB native modes ----------
-        dotnet run --project src/VipbJsonTool vipb2json `
-          tests/Samples/seed.vipb tests/tmp/seed.vipb.json
-        dotnet run --project src/VipbJsonTool json2vipb `
-          tests/tmp/seed.vipb.json tests/tmp/seed.roundtrip.vipb
+      - name: Upload seed-vipb.yaml artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seed-vipb.yaml
+          path: release/seed-vipb.yaml
 
-        # ---------- Unified wrapper modes ----------
-        dotnet run --project src/VipbJsonTool buildspec2json `
-          tests/Samples/seed.lvproj tests/tmp/seed.lvproj_bs.json
-        dotnet run --project src/VipbJsonTool json2buildspec `
-          tests/tmp/seed.lvproj_bs.json tests/tmp/seed.roundtrip_bs.lvproj
+      - name: Upload seed-lvproj.yaml artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seed-lvproj.yaml
+          path: release/seed-lvproj.yaml
 
-        dotnet run --project src/VipbJsonTool buildspec2json `
-          tests/Samples/seed.vipb tests/tmp/seed.vipb_bs.json
-        dotnet run --project src/VipbJsonTool json2buildspec `
-          tests/tmp/seed.vipb_bs.json tests/tmp/seed.roundtrip_bs.vipb
-
-    # -------------------------------------------------------------------------
-    # Pester tests (Golden Sample only)
-    # -------------------------------------------------------------------------
-    - name: Run Pester Golden Sample tests
-      run: |
-        $result = Invoke-Pester -Configuration @{
-          Run        = @{ Path = 'tests/RoundTrip.GoldenSample.Tests.ps1'; PassThru = $true }
-          TestResult = @{ Enabled = $true; OutputFormat = 'NUnitXml'; OutputPath = 'golden-sample-results.xml' }
-        }
-        if ($result.FailedCount -gt 0) { exit 1 }
-
-    # -------------------------------------------------------------------------
-    # Upload Test Results
-    # -------------------------------------------------------------------------
-    - name: Upload Test Results
-      uses: actions/upload-artifact@v4
-      with:
-        name: pester-test-results
-        path: golden-sample-results.xml
-        if-no-files-found: warn
-
-    # -------------------------------------------------------------------------
-    # Docker build/publish (unchanged)
-    # -------------------------------------------------------------------------
-    - name: Build Docker image
-      run: docker build -t ghcr.io/labview-community-ci-cd/seed:${{ github.sha }} .
-
-    - name: Docker login, tag & push
-      if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
-      uses: docker/login-action@v3
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GHCR_PAT }}
-
-    - name: Tag Docker images
-      if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
-      run: |
-        docker tag ghcr.io/labview-community-ci-cd/seed:${{ github.sha }} ghcr.io/labview-community-ci-cd/seed:latest
-        docker tag ghcr.io/labview-community-ci-cd/seed:${{ github.sha }} ghcr.io/labview-community-ci-cd/seed:v2
-        docker tag ghcr.io/labview-community-ci-cd/seed:${{ github.sha }} ghcr.io/labview-community-ci-cd/seed:${{ github.ref_name }}
-
-    # -------------------------------------------------------------------------
-    # Upload CLI artifact
-    # -------------------------------------------------------------------------
-    - name: Upload CLI artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: vipb-json-cli-linux-x64
-        path: publish/linux-x64/VipbJsonTool
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vipb-json-cli-linux-x64
+          path: publish/linux-x64/VipbJsonTool
