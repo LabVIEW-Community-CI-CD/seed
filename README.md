@@ -64,6 +64,7 @@ jobs:
           seed_lvproj: true         # Create seed.lvproj if missing
           seed_vipb: true          # Create buildspec.vipb if missing
           tag: ${{ github.ref_name }}
+```
 What happens in the above workflow?
 If a seed.lvproj file is not present at the repository root, the action copies the template tests/Samples/seed.lvproj into place as a starting project file.
 If build/buildspec.vipb is not present, the action creates the build directory (if needed) and copies the template tests/Samples/seed.vipb to build/buildspec.vipb.
