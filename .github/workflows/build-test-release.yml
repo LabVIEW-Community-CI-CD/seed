@@ -65,6 +65,9 @@ jobs:
       # --- Pester Test & Coverage ---
       - name: Install Pester
         run: Install-Module Pester -Force -Scope CurrentUser
+      
+      - name: Ensure /usr/local/bin in PATH
+        run: $env:PATH += ':/usr/local/bin'
 
       - name: Run all Pester tests with coverage
         run: |
