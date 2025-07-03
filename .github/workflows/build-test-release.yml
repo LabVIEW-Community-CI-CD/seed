@@ -3,7 +3,7 @@ name: build-test-release
 on:
   push:
     branches: [ main ]
-    tags:  [ 'v*' ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
 
@@ -29,32 +29,49 @@ jobs:
             **/*.csproj
             **/*.sln
 
-      - name: Restore .NET packages
+      # --- VipbJsonTool Build/Publish ---
+      - name: Restore .NET packages (VipbJsonTool)
         run: dotnet restore src/VipbJsonTool/VipbJsonTool.csproj
 
-      - name: Build .NET project
+      - name: Build .NET project (VipbJsonTool)
         run: dotnet build src/VipbJsonTool/VipbJsonTool.csproj -c Release --no-restore -p:TreatWarningsAsErrors=false
 
-      - name: Publish CLI (linux-x64 single-file)
+      - name: Publish CLI (VipbJsonTool, linux-x64 single-file)
         run: dotnet publish src/VipbJsonTool -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -p:TreatWarningsAsErrors=false --no-restore --no-build -o publish/linux-x64
 
+      # --- LvprojJsonTool Build/Publish ---
+      - name: Restore .NET packages (LvprojJsonTool)
+        run: dotnet restore src/LvprojJsonTool/LvprojJsonTool.csproj
+
+      - name: Build .NET project (LvprojJsonTool)
+        run: dotnet build src/LvprojJsonTool/LvprojJsonTool.csproj -c Release --no-restore -p:TreatWarningsAsErrors=false
+
+      - name: Publish CLI (LvprojJsonTool, linux-x64 single-file)
+        run: dotnet publish src/LvprojJsonTool -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -p:TreatWarningsAsErrors=false --no-restore --no-build -o publish/linux-x64
+
+      # --- Pester Test & Coverage ---
       - name: Install Pester
         run: Install-Module Pester -Force -Scope CurrentUser
 
-      - name: Run Golden Sample test (YAML generation)
+      - name: Run all Pester tests with coverage
         run: |
-          $result = Invoke-Pester -Configuration @{
-            Run = @{ Path = 'tests/RoundTrip.GoldenSample.Tests.ps1'; PassThru = $true }
-            TestResult = @{ Enabled = $true; OutputFormat = 'NUnitXml'; OutputPath = 'golden-sample-results.xml' }
-          }
-          if ($result.FailedCount -gt 0) { exit 1 }
+          $Config = New-PesterConfiguration
+          $Config.Run.Path = 'tests'
+          $Config.CodeCoverage.Enabled = $true
+          $Config.CodeCoverage.Path = 'tools/*.ps1'
+          $Config.TestResult.Enabled = $true
+          $Config.TestResult.OutputFormat = 'NUnitXml'
+          $Config.TestResult.OutputPath = 'test-results.xml'
+          Invoke-Pester -Configuration $Config
+          if ($LASTEXITCODE -ne 0) { exit 1 }
 
+      # --- Upload Artifacts ---
       - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: golden-sample-test-results
-          path: golden-sample-results.xml
+          name: test-results
+          path: test-results.xml
 
       - name: Upload seed-vipb.yaml artifact
         if: success()
@@ -70,8 +87,21 @@ jobs:
           name: seed-lvproj.yaml
           path: release/seed-lvproj.yaml
 
-      - name: Upload CLI artifact
+      - name: Upload VipbJsonTool CLI artifact
         uses: actions/upload-artifact@v4
         with:
           name: vipb-json-cli-linux-x64
           path: publish/linux-x64/VipbJsonTool
+
+      - name: Upload LvprojJsonTool CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lvproj-json-cli-linux-x64
+          path: publish/linux-x64/LvprojJsonTool
+
+      # --- Optional: Build Docker Image ---
+      - name: Build Docker image (for manual test or release)
+        run: |
+          docker build -t labview-seed:ci .
+        # Add a docker push step here if you want to push to a registry
+
