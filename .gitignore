@@ -2,6 +2,7 @@
 #            Existing ignores (leave these as-is / adjust)         
 # -----------------------------------------------------------------
 # --- .NET / VS Code ---
+bin/
 obj/
 publish/
 *.user
