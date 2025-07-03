@@ -39,7 +39,7 @@ jobs:
       - name: Publish CLI (VipbJsonTool, linux-x64 single-file)
         run: dotnet publish src/VipbJsonTool -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true --no-restore --no-build -o publish/linux-x64
 
-       # --- LvprojJsonTool Build/Publish ---
+      # --- LvprojJsonTool Build/Publish ---
       - name: Restore .NET packages (LvprojJsonTool)
         run: dotnet restore src/LvprojJsonTool/LvprojJsonTool.csproj
 
@@ -49,20 +49,18 @@ jobs:
       - name: Publish CLI (LvprojJsonTool, linux-x64 single-file)
         run: dotnet publish src/LvprojJsonTool -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -p:TreatWarningsAsErrors=false --no-restore --no-build -o publish/linux-x64
 
-      # ─── ensure bin/ exists and is writable ──────────────────────────────
-      - name: Prepare bin/ directory
+      - name: Install CLI tools to /usr/local/bin
         run: |
-          mkdir -p bin                       # create if missing
-          chmod u+rwx bin                    # ensure current user can write
-          rm -f bin/VipbJsonTool bin/LvprojJsonTool  # delete stale copies if any
-
-      # ─── copy VipbJsonTool ────────────────────────────────────────────────
-      - name: Copy VipbJsonTool binary to bin/
-        run: Copy-Item publish/linux-x64/VipbJsonTool bin/ -Force
-
-      # ─── copy LvprojJsonTool ──────────────────────────────────────────────
-      - name: Copy LvprojJsonTool binary to bin/
-        run: Copy-Item publish/linux-x64/LvprojJsonTool bin/ -Force
+          sudo cp publish/linux-x64/VipbJsonTool /usr/local/bin/VipbJsonTool
+          sudo cp publish/linux-x64/LvprojJsonTool /usr/local/bin/LvprojJsonTool
+          sudo cp bin/vipb2json /usr/local/bin/vipb2json
+          sudo cp bin/json2vipb /usr/local/bin/json2vipb
+          sudo cp bin/lvproj2json /usr/local/bin/lvproj2json
+          sudo cp bin/json2lvproj /usr/local/bin/json2lvproj
+          sudo cp bin/buildspec2json /usr/local/bin/buildspec2json
+          sudo cp bin/json2buildspec /usr/local/bin/json2buildspec
+          sudo chmod +x /usr/local/bin/VipbJsonTool /usr/local/bin/LvprojJsonTool
+          sudo chmod +x /usr/local/bin/vipb2json /usr/local/bin/json2vipb /usr/local/bin/lvproj2json /usr/local/bin/json2lvproj /usr/local/bin/buildspec2json /usr/local/bin/json2buildspec
 
       # --- Pester Test & Coverage ---
       - name: Install Pester
@@ -119,4 +117,3 @@ jobs:
         run: |
           docker build -t labview-seed:ci .
         # Add a docker push step here if you want to push to a registry
-

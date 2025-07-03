@@ -1,34 +1,25 @@
 $RepoRoot = Split-Path $PSScriptRoot -Parent
-$BinDir   = Join-Path $RepoRoot "bin"
 
 Describe "CLI wrapper scripts basic behavior" {
     $cliCommands = @("vipb2json", "json2vipb", "lvproj2json", "json2lvproj", "buildspec2json", "json2buildspec")
     foreach ($cmd in $cliCommands) {
         It "exists and is executable: $cmd" {
-            $cmdPath = Join-Path $BinDir $cmd
-            (Test-Path $cmdPath) | Should -BeTrue -Because "$cmdPath missing"
-            & chmod +x $cmdPath
+            (Get-Command $cmd -ErrorAction SilentlyContinue) | Should -Not -Be $null -Because "$cmd not found in PATH"
         }
         It "displays help for '$cmd' when --help is given" {
-            $cmdPath = Join-Path $BinDir $cmd
-            (Test-Path $cmdPath) | Should -BeTrue -Because "$cmdPath missing"
-            $output = & $cmdPath --help 2>&1
+            $output = & $cmd --help 2>&1
             $LASTEXITCODE | Should -Be 0
             $output | Should -Match "\bUsage\b"
         }
         It "exits with error on unknown flag for '$cmd'" {
-            $cmdPath = Join-Path $BinDir $cmd
-            (Test-Path $cmdPath) | Should -BeTrue -Because "$cmdPath missing"
-            $output = & $cmdPath --unknownFlag 2>&1
+            $output = & $cmd --unknownFlag 2>&1
             $LASTEXITCODE | Should -Not -Be 0
             $output | Should -Match "Unknown"
         }
     }
 
     It "requires --input and --output parameters (shows usage if missing)" {
-        $cmdPath = Join-Path $BinDir "vipb2json"
-        (Test-Path $cmdPath) | Should -BeTrue
-        $output = & $cmdPath 2>&1
+        $output = & vipb2json 2>&1
         $LASTEXITCODE | Should -Not -Be 0
         $output | Should -Match "\bUsage\b"
     }
@@ -50,8 +41,7 @@ Describe "End-to-end conversion via CLI wrappers" {
     It "converts a VIPB file to JSON via vipb2json" {
         $vipbSample = Join-Path $RepoRoot "tests/Samples/seed.vipb"
         $outJson    = Join-Path $TestOut "seed.vipb.json"
-        $vipb2json  = Join-Path $BinDir "vipb2json"
-        (Test-Path $vipb2json) | Should -BeTrue
+        $vipb2json  = "vipb2json"
         (Test-Path $vipbSample) | Should -BeTrue
         & $vipb2json --input $vipbSample --output $outJson
         $LASTEXITCODE | Should -Be 0
@@ -64,10 +54,9 @@ Describe "End-to-end conversion via CLI wrappers" {
         $vipbSample = Join-Path $RepoRoot "tests/Samples/seed.vipb"
         $outJson    = Join-Path $TestOut "roundtrip.json"
         $newVipb    = Join-Path $TestOut "roundtrip.vipb"
-        $vipb2json  = Join-Path $BinDir "vipb2json"
-        $json2vipb  = Join-Path $BinDir "json2vipb"
-        (Test-Path $vipb2json) | Should -BeTrue
-        (Test-Path $json2vipb) | Should -BeTrue
+        $vipb2json  = "vipb2json"
+        $json2vipb  = "json2vipb"
+        (Test-Path $vipbSample) | Should -BeTrue
         & $vipb2json --input $vipbSample --output $outJson
         $LASTEXITCODE | Should -Be 0
         & $json2vipb --input $outJson --output $newVipb
@@ -81,10 +70,9 @@ Describe "End-to-end conversion via CLI wrappers" {
         $lvprojSample = Join-Path $RepoRoot "tests/Samples/seed.lvproj"
         $outJson     = Join-Path $TestOut "project.json"
         $newLvproj   = Join-Path $TestOut "project.lvproj"
-        $lvproj2json = Join-Path $BinDir "lvproj2json"
-        $json2lvproj = Join-Path $BinDir "json2lvproj"
-        (Test-Path $lvproj2json) | Should -BeTrue
-        (Test-Path $json2lvproj) | Should -BeTrue
+        $lvproj2json = "lvproj2json"
+        $json2lvproj = "json2lvproj"
+        (Test-Path $lvprojSample) | Should -BeTrue
         & $lvproj2json --input $lvprojSample --output $outJson
         $LASTEXITCODE | Should -Be 0
         & $json2lvproj --input $outJson --output $newLvproj
