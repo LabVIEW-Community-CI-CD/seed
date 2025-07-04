@@ -37,7 +37,7 @@ jobs:
         run: dotnet build src/VipbJsonTool/VipbJsonTool.csproj -c Release --no-restore -p:TreatWarningsAsErrors=false
 
       - name: Publish CLI (VipbJsonTool, linux-x64 single-file)
-        run: dotnet publish src/VipbJsonTool -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true --no-restore --no-build -o publish/linux-x64
+        run: dotnet publish src/VipbJsonTool -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -p:TreatWarningsAsErrors=false --no-restore --no-build -o publish/linux-x64
 
       # --- LvprojJsonTool Build/Publish ---
       - name: Restore .NET packages (LvprojJsonTool)
@@ -83,13 +83,39 @@ jobs:
           Invoke-Pester -Configuration $Config
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
-      # --- Upload Artifacts ---
       - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results
           path: test-results.xml
+
+      # --- Convert seed files to JSON and YAML ---
+      - name: Convert LabVIEW seed files to JSON and YAML
+        if: success()
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yq
+          if (!(Test-Path -Path 'release')) { New-Item -Path 'release' -ItemType Directory | Out-Null }
+          vipb2json --input tests/Samples/seed.vipb --output release/seed-vipb.json
+          lvproj2json --input tests/Samples/seed.lvproj --output release/seed-lvproj.json
+          yq -p json -o yaml release/seed-vipb.json > release/seed-vipb.yaml
+          yq -p json -o yaml release/seed-lvproj.json > release/seed-lvproj.yaml
+
+      # --- Upload Artifacts ---
+      - name: Upload seed-vipb.json artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seed-vipb.json
+          path: release/seed-vipb.json
+
+      - name: Upload seed-lvproj.json artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seed-lvproj.json
+          path: release/seed-lvproj.json
 
       - name: Upload seed-vipb.yaml artifact
         if: success()
@@ -117,7 +143,7 @@ jobs:
           name: lvproj-json-cli-linux-x64
           path: publish/linux-x64/LvprojJsonTool
 
-      # --- Optional: Build Docker Image ---
+      # --- Optional: Build Docker image (for manual test or release) ---
       - name: Build Docker image (for manual test or release)
         run: |
           docker build -t labview-seed:ci .
