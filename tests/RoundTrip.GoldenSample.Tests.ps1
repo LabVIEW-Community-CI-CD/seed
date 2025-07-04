@@ -34,18 +34,22 @@ Describe "VIPB golden sample round-trip" {
                 $sampleName   = [System.IO.Path]::GetFileNameWithoutExtension($thisFile.Name)
                 $sampleExt    = [System.IO.Path]::GetExtension($thisFile.Name)
                 $workDir      = Join-Path $script:RoundTripOutDir "$($sampleName)$($sampleExt)"
-                if (-not (Test-Path $workDir)) {
-                    New-Item $workDir -Type Directory | Out-Null
+                if (Test-Path $workDir) {
+                    Remove-Item $workDir -Recurse -Force
                 }
+                New-Item $workDir -Type Directory | Out-Null
 
                 # Define paths for intermediate files
                 $origJsonPath      = Join-Path $workDir "$sampleName.original.json"
                 $roundtripVipbPath = Join-Path $workDir "$sampleName.roundtrip.vipb"
                 $roundtripJsonPath = Join-Path $workDir "$sampleName.roundtrip.json"
 
+                $vipb2jsonCmd = (Get-Command vipb2json -ErrorAction Stop).Path
+                $json2vipbCmd = (Get-Command json2vipb -ErrorAction Stop).Path
+
                 try {
                     # 1. Convert original .vipb to JSON
-                    & vipb2json --input "$($thisFile.FullName)" --output "$origJsonPath"
+                    & $vipb2jsonCmd --input "$($thisFile.FullName)" --output "$origJsonPath"
                     if ($LASTEXITCODE -ne 0) {
                         throw "vipb2json failed (exit code $LASTEXITCODE)"
                     }
@@ -54,7 +58,7 @@ Describe "VIPB golden sample round-trip" {
                     }
 
                     # 2. Convert JSON back to .vipb
-                    & json2vipb --input "$origJsonPath" --output "$roundtripVipbPath"
+                    & $json2vipbCmd --input "$origJsonPath" --output "$roundtripVipbPath"
                     if ($LASTEXITCODE -ne 0) {
                         throw "json2vipb failed (exit code $LASTEXITCODE)"
                     }
@@ -63,7 +67,7 @@ Describe "VIPB golden sample round-trip" {
                     }
 
                     # 3. Convert the round-tripped .vipb again to JSON
-                    & vipb2json --input "$roundtripVipbPath" --output "$roundtripJsonPath"
+                    & $vipb2jsonCmd --input "$roundtripVipbPath" --output "$roundtripJsonPath"
                     if ($LASTEXITCODE -ne 0) {
                         throw "vipb2json (round-trip) failed (exit code $LASTEXITCODE)"
                     }
@@ -123,18 +127,22 @@ Describe "LVPROJ golden sample round-trip" {
                 $sampleName     = [System.IO.Path]::GetFileNameWithoutExtension($thisFile.Name)
                 $sampleExt      = [System.IO.Path]::GetExtension($thisFile.Name)
                 $workDir        = Join-Path $script:RoundTripOutDir "$($sampleName)$($sampleExt)"
-                if (-not (Test-Path $workDir)) {
-                    New-Item $workDir -Type Directory | Out-Null
+                if (Test-Path $workDir) {
+                    Remove-Item $workDir -Recurse -Force
                 }
+                New-Item $workDir -Type Directory | Out-Null
 
                 # Define paths for intermediate files
                 $origJsonPath        = Join-Path $workDir "$sampleName.original.json"
                 $roundtripProjPath   = Join-Path $workDir "$sampleName.roundtrip.lvproj"
                 $roundtripJsonPath   = Join-Path $workDir "$sampleName.roundtrip.json"
 
+                $lvproj2jsonCmd = (Get-Command lvproj2json -ErrorAction Stop).Path
+                $json2lvprojCmd = (Get-Command json2lvproj -ErrorAction Stop).Path
+
                 try {
                     # 1. Convert original .lvproj to JSON
-                    & lvproj2json --input "$($thisFile.FullName)" --output "$origJsonPath"
+                    & $lvproj2jsonCmd --input "$($thisFile.FullName)" --output "$origJsonPath"
                     if ($LASTEXITCODE -ne 0) {
                         throw "lvproj2json failed (exit code $LASTEXITCODE)"
                     }
@@ -143,7 +151,7 @@ Describe "LVPROJ golden sample round-trip" {
                     }
 
                     # 2. Convert JSON back to .lvproj
-                    & json2lvproj --input "$origJsonPath" --output "$roundtripProjPath"
+                    & $json2lvprojCmd --input "$origJsonPath" --output "$roundtripProjPath"
                     if ($LASTEXITCODE -ne 0) {
                         throw "json2lvproj failed (exit code $LASTEXITCODE)"
                     }
@@ -152,7 +160,7 @@ Describe "LVPROJ golden sample round-trip" {
                     }
 
                     # 3. Convert the round-tripped .lvproj again to JSON
-                    & lvproj2json --input "$roundtripProjPath" --output "$roundtripJsonPath"
+                    & $lvproj2jsonCmd --input "$roundtripProjPath" --output "$roundtripJsonPath"
                     if ($LASTEXITCODE -ne 0) {
                         throw "lvproj2json (round-trip) failed (exit code $LASTEXITCODE)"
                     }

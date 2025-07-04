@@ -5,22 +5,26 @@ Describe "CLI wrapper scripts basic behavior" {
     foreach ($cmd in $cliCommands) {
         $tool = $cmd
         It "exists and is executable: $tool" {
-            (Get-Command $tool -ErrorAction SilentlyContinue) | Should -Not -Be $null -Because "$tool not found in PATH"
+            $resolvedCmd = Get-Command $tool -ErrorAction SilentlyContinue
+            $resolvedCmd | Should -Not -Be $null -Because "$tool not found in PATH"
         }
         It "displays help for '$tool' when --help is given" {
-            $output = & $tool --help 2>&1
+            $resolvedCmd = Get-Command $tool -ErrorAction Stop
+            $output = & $resolvedCmd.Path --help 2>&1
             $LASTEXITCODE | Should -Be 0
             $output | Should -Match "\bUsage\b"
         }
         It "exits with error on unknown flag for '$tool'" {
-            $output = & $tool --unknownFlag 2>&1
+            $resolvedCmd = Get-Command $tool -ErrorAction Stop
+            $output = & $resolvedCmd.Path --unknownFlag 2>&1
             $LASTEXITCODE | Should -Not -Be 0
             $output | Should -Match "Unknown"
         }
     }
 
     It "requires --input and --output parameters (shows usage if missing)" {
-        $output = & vipb2json 2>&1
+        $cmdPath = (Get-Command vipb2json -ErrorAction Stop).Path
+        $output = & $cmdPath 2>&1
         $LASTEXITCODE | Should -Not -Be 0
         $output | Should -Match "\bUsage\b"
     }
@@ -42,7 +46,7 @@ Describe "End-to-end conversion via CLI wrappers" {
     It "converts a VIPB file to JSON via vipb2json" {
         $vipbSample = Join-Path $RepoRoot "tests/Samples/seed.vipb"
         $outJson    = Join-Path $TestOut "seed.vipb.json"
-        $vipb2json  = "vipb2json"
+        $vipb2json  = (Get-Command vipb2json -ErrorAction Stop).Path
         (Test-Path $vipbSample) | Should -BeTrue
         & $vipb2json --input $vipbSample --output $outJson
         $LASTEXITCODE | Should -Be 0
@@ -55,8 +59,8 @@ Describe "End-to-end conversion via CLI wrappers" {
         $vipbSample = Join-Path $RepoRoot "tests/Samples/seed.vipb"
         $outJson    = Join-Path $TestOut "roundtrip.json"
         $newVipb    = Join-Path $TestOut "roundtrip.vipb"
-        $vipb2json  = "vipb2json"
-        $json2vipb  = "json2vipb"
+        $vipb2json  = (Get-Command vipb2json -ErrorAction Stop).Path
+        $json2vipb  = (Get-Command json2vipb -ErrorAction Stop).Path
         (Test-Path $vipbSample) | Should -BeTrue
         & $vipb2json --input $vipbSample --output $outJson
         $LASTEXITCODE | Should -Be 0
@@ -71,8 +75,8 @@ Describe "End-to-end conversion via CLI wrappers" {
         $lvprojSample = Join-Path $RepoRoot "tests/Samples/seed.lvproj"
         $outJson     = Join-Path $TestOut "project.json"
         $newLvproj   = Join-Path $TestOut "project.lvproj"
-        $lvproj2json = "lvproj2json"
-        $json2lvproj = "json2lvproj"
+        $lvproj2json = (Get-Command lvproj2json -ErrorAction Stop).Path
+        $json2lvproj = (Get-Command json2lvproj -ErrorAction Stop).Path
         (Test-Path $lvprojSample) | Should -BeTrue
         & $lvproj2json --input $lvprojSample --output $outJson
         $LASTEXITCODE | Should -Be 0
