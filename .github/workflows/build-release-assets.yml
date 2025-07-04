@@ -8,22 +8,22 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: 8.0.x }
+
       - run: dotnet publish src/VipbJsonTool -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o publish
       - run: dotnet publish src/LvprojJsonTool -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o publish
 
+      - name: Install CLI binaries system-wide
+        run: |
+          sudo cp publish/VipbJsonTool   /usr/local/bin/VipbJsonTool
+          sudo cp publish/LvprojJsonTool /usr/local/bin/LvprojJsonTool
+          sudo chmod +x /usr/local/bin/VipbJsonTool /usr/local/bin/LvprojJsonTool
+
       - run: chmod +x bin/vipb2json bin/json2vipb bin/lvproj2json bin/json2lvproj bin/buildspec2json bin/json2buildspec
 
-      - run: |
+      - name: Generate seed JSON/YAML
+        run: |
           ./bin/vipb2json  --input tests/Samples/seed.vipb   --output seed-vipb.json
           ./bin/lvproj2json --input tests/Samples/seed.lvproj --output seed-lvproj.json
           yq -p json -o yaml seed-vipb.json   > seed-vipb.yaml
           yq -p json -o yaml seed-lvproj.json > seed-lvproj.yaml
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: release-assets
-          path: |
-            publish/VipbJsonTool
-            publish/LvprojJsonTool
-            seed-*.json
-            seed-*.yaml
