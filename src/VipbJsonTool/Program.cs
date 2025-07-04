@@ -1,113 +1,69 @@
 using System;
 using System.IO;
-using System.Xml;
 using Newtonsoft.Json;
+using System.Xml.Linq;
 
 namespace VipbJsonTool
 {
-    class Program
+    internal class Program
     {
+        /// <summary>
+        ///  vipb2json  --input <file.vipb>  --output <file.json>
+        ///  json2vipb --input <file.json>  --output <file.vipb>
+        /// </summary>
         static int Main(string[] args)
         {
-            if (args.Length < 3)
+            if (args.Length != 4 || args[0] != "--input" || args[2] != "--output")
             {
-                Console.Error.WriteLine("Usage: VipbJsonTool <mode> <input> <output>");
+                Console.Error.WriteLine("Usage: VipbJsonTool --input <file.vipb|file.json> --output <file.json|file.vipb>");
                 return 1;
             }
 
-            string mode       = args[0].ToLower();
             string inputPath  = args[1];
-            string outputPath = args[2];
+            string outputPath = args[3];
 
-            // Ensure the output directory exists
-            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+            if (!File.Exists(inputPath))
+            {
+                Console.Error.WriteLine($"Input file '{inputPath}' does not exist.");
+                return 1;
+            }
+
+            // --- Ensure output directory exists (unless no directory specified)
+            var dir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
 
             try
             {
-                switch (mode)
+                if (inputPath.EndsWith(".vipb", StringComparison.OrdinalIgnoreCase))
                 {
-                    case "vipb2json":      ConvertXmlToJson(inputPath, outputPath, "Package"); break;
-                    case "json2vipb":      ConvertJsonToXml(inputPath, outputPath, "Package"); break;
-                    case "lvproj2json":    ConvertXmlToJson(inputPath, outputPath, "Project"); break;
-                    case "json2lvproj":    ConvertJsonToXml(inputPath, outputPath, "Project"); break;
-                    case "buildspec2json": ConvertBuildSpecToJson(inputPath, outputPath);       break;
-                    case "json2buildspec": ConvertJsonToBuildSpec(inputPath, outputPath);       break;
-                    default:
-                        Console.Error.WriteLine($"ERROR: Unknown mode '{mode}'");
-                        return 1;
+                    // VIPB → JSON
+                    var xml = XDocument.Load(inputPath);
+                    var jsonString = JsonConvert.SerializeXNode(xml, Formatting.Indented);
+                    File.WriteAllText(outputPath, jsonString);
                 }
-
-                Console.WriteLine($"Successfully executed {mode}");
-                return 0;
+                else if (inputPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                {
+                    // JSON → VIPB
+                    var jsonText = File.ReadAllText(inputPath);
+                    var xml      = JsonConvert.DeserializeXNode(jsonText, "VI_Package_Builder_Settings");
+                    xml.Save(outputPath);
+                }
+                else
+                {
+                    Console.Error.WriteLine("Input must be .vipb or .json");
+                    return 1;
+                }
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"ERROR: {ex.Message}");
+                Console.Error.WriteLine($"Error: {ex.Message}");
                 return 1;
             }
-        }
 
-        //----------------------------------------------------------------------
-        // XML ➜ JSON
-        //----------------------------------------------------------------------
-
-        private static void ConvertXmlToJson(string xmlPath, string jsonPath, string rootElementName)
-        {
-            if (!File.Exists(xmlPath))
-                throw new FileNotFoundException($"Input file not found: {xmlPath}");
-
-            var doc = new XmlDocument { PreserveWhitespace = true };
-            doc.Load(xmlPath);
-
-            if (doc.DocumentElement?.Name != rootElementName)
-                throw new InvalidOperationException($"Invalid root element. Expected '{rootElementName}'.");
-
-            // Use fully-qualified enum to avoid ambiguity
-            string json = JsonConvert.SerializeXmlNode(
-                doc,
-                Newtonsoft.Json.Formatting.Indented,  // specify the JSON Formatting
-                /* omitRootObject: */ false);
-            File.WriteAllText(jsonPath, json);
-        }
-
-        //----------------------------------------------------------------------
-        // JSON ➜ XML
-        //----------------------------------------------------------------------
-
-        private static void ConvertJsonToXml(string jsonPath, string xmlPath, string rootElementName)
-        {
-            if (!File.Exists(jsonPath))
-                throw new FileNotFoundException($"Input file not found: {jsonPath}");
-
-            string json = File.ReadAllText(jsonPath);
-
-            var xmlDoc = JsonConvert.DeserializeXmlNode(json)!;
-
-            if (xmlDoc.DocumentElement?.Name != rootElementName)
-                throw new InvalidOperationException($"Invalid root element. Expected '{rootElementName}'.");
-
-            using var writer = XmlWriter.Create(xmlPath, new XmlWriterSettings { Indent = true });
-            xmlDoc.Save(writer);
-        }
-
-        //----------------------------------------------------------------------
-        // Build‑spec helpers (unchanged)
-        //----------------------------------------------------------------------
-
-        private static void ConvertBuildSpecToJson(string inputPath, string outputPath)
-        {
-            string ext = Path.GetExtension(inputPath).ToLowerInvariant();
-            if (ext == ".vipb")      ConvertXmlToJson(inputPath, outputPath, "Package");
-            else if (ext == ".lvproj") ConvertXmlToJson(inputPath, outputPath, "Project");
-            else throw new InvalidOperationException("Unsupported input file type for buildspec2json. Must be .vipb or .lvproj");
-        }
-
-        private static void ConvertJsonToBuildSpec(string inputPath, string outputPath)
-        {
-            string ext = Path.GetExtension(outputPath).ToLowerInvariant();
-            if (ext == ".vipb")      ConvertJsonToXml(inputPath, outputPath, "Package");
-            else if (ext == ".lvproj") ConvertJsonToXml(inputPath, outputPath, "Project");
-            else throw new InvalidOperationException("Unsupported output file type for json2buildspec. Must be .vipb or .lvproj");
+            return 0;
         }
     }
 }
