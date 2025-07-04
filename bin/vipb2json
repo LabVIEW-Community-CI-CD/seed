@@ -43,4 +43,4 @@ if [[ -z "$input" || -z "$output" ]]; then
     exit 1
 fi
 
-exec /usr/local/bin/VipbJsonTool vipb2json "$input" "$output"
+exec /usr/local/bin/VipbJsonTool --input "$input" --output "$output"
